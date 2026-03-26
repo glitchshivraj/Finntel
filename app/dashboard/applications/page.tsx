@@ -1,130 +1,125 @@
 "use client";
 import { useState, useEffect } from "react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface Applicant {
-  id: string; name: string; avatar: string; age: number;
-  jobTitle: string; company: string; employmentType: string; workExp: number;
-  location: string; email: string; phone: string;
-  annualIncome: number; monthlyIncome: number; monthlyExpenses: number;
-  creditScore: number; creditAge: number; creditAccounts: number;
-  latePayments: number; defaults: number; creditCardUsage: number; creditUtilization: number;
-  loanAmount: number; loanType: string; loanTenure: number; interestRate: number; emi: number;
-  existingLoans: number; totalLiabilities: number; dti: number;
-  score: number; risk: "Low" | "Medium" | "High";
-  decision: "Approved" | "Rejected" | "Review";
-  confidence: number;
-  appliedAt: string; processedAt: string; processingTime: string;
-}
-
-// ─── Risk Engine ──────────────────────────────────────────────────────────────
-function computeScore(a: Applicant) {
-  const creditPts  = a.creditScore >= 750 ? 30 : a.creditScore >= 700 ? 24 : a.creditScore >= 650 ? 16 : a.creditScore >= 600 ? 8 : 2;
-  const incomePts  = a.annualIncome >= 1500000 ? 25 : a.annualIncome >= 800000 ? 20 : a.annualIncome >= 400000 ? 13 : a.annualIncome >= 200000 ? 6 : 2;
-  const dtiPts     = a.dti <= 20 ? 20 : a.dti <= 35 ? 15 : a.dti <= 50 ? 8 : a.dti <= 65 ? 3 : 0;
-  const empPts     = a.workExp >= 5 ? 15 : a.workExp >= 3 ? 12 : a.workExp >= 1 ? 7 : 2;
-  const debtPts    = a.totalLiabilities < 500000 ? 10 : a.totalLiabilities < 1000000 ? 7 : a.totalLiabilities < 2000000 ? 4 : 0;
-  return { creditPts, incomePts, dtiPts, empPts, debtPts, total: Math.min(100, creditPts + incomePts + dtiPts + empPts + debtPts) };
-}
-
-// ─── Data ─────────────────────────────────────────────────────────────────────
-const APP: Applicant = {
-  id: "#FNT-004821", name: "Arjun Mehta", avatar: "AM", age: 34,
-  jobTitle: "Senior Software Engineer", company: "Infosys Technologies Ltd.",
-  employmentType: "Salaried", workExp: 4.2,
-  location: "Mumbai, Maharashtra",
-  email: "arjun.mehta@gmail.com", phone: "+91 98765 43210",
-  annualIncome: 1840000, monthlyIncome: 153333, monthlyExpenses: 42000,
-  creditScore: 784, creditAge: 7, creditAccounts: 5,
-  latePayments: 0, defaults: 0, creditCardUsage: 18000, creditUtilization: 22,
-  loanAmount: 1200000, loanType: "Home Improvement", loanTenure: 36,
-  interestRate: 10.5, emi: 38900,
-  existingLoans: 1, totalLiabilities: 420000, dti: 5,
-  score: 91, risk: "Low", decision: "Approved", confidence: 94,
-  appliedAt: "23 Mar 2024, 10:42 AM",
-  processedAt: "23 Mar 2024, 10:42 AM",
-  processingTime: "1.8s",
+// ─── Applicant Data ───────────────────────────────────────────────────────────
+const DATA = {
+  id:                "#FNT-004821",
+  name:              "Arjun Mehta",
+  avatar:            "AM",
+  decision:          "Approved" as "Approved" | "Rejected" | "Review",
+  appliedDate:       "23 Mar 2024",
+  loanAmount:        1200000,
+  loanType:          "Home Improvement",
+  annualIncome:      1840000,
+  monthlyIncome:     153333,
+  monthlyExpenses:   42000,
+  emi:               38900,
+  dti:               5,
+  creditUtilization: 22,
+  totalLiabilities:  420000,
+  creditScore:       784,
+  loanToIncome:      0.65,
+  interestRate:      10.5,
+  tenure:            36,
 };
 
-const BREAKDOWN = computeScore(APP);
+// Derived
+const surplus     = DATA.monthlyIncome - DATA.monthlyExpenses - DATA.emi;
+const expPct      = Math.round((DATA.monthlyExpenses / DATA.monthlyIncome) * 100);
+const emiPct      = Math.round((DATA.emi / DATA.monthlyIncome) * 100);
+const surplusPct  = Math.round((surplus / DATA.monthlyIncome) * 100);
+const liabPct     = Math.round((DATA.totalLiabilities / DATA.annualIncome) * 100);
 
-const RULES = [
-  { rule: "Credit Score ≥ 750",           result: true,  impact: "Low Risk",     reason: `Score is ${APP.creditScore} — exceeds threshold` },
-  { rule: "DTI Ratio ≤ 35%",              result: true,  impact: "Low Risk",     reason: `DTI is only ${APP.dti}% — well within limit` },
-  { rule: "Employment Tenure ≥ 3 years",  result: true,  impact: "Stable",       reason: `${APP.workExp} years at ${APP.company}` },
-  { rule: "No defaults in 24 months",     result: true,  impact: "Approved",     reason: "Clean repayment history — 0 defaults" },
-  { rule: "Loan ≤ 5× Annual Income",      result: true,  impact: "Low Risk",     reason: `Loan is ${(APP.loanAmount/APP.annualIncome).toFixed(2)}× income` },
-  { rule: "Credit Utilization ≤ 30%",     result: true,  impact: "Healthy",      reason: `Utilization at ${APP.creditUtilization}% — low` },
-  { rule: "Monthly Surplus ≥ EMI",        result: true,  impact: "Approved",     reason: `Surplus ₹${((APP.monthlyIncome - APP.monthlyExpenses - APP.emi)/1000).toFixed(0)}K after EMI` },
+// ─── Risk Alerts ──────────────────────────────────────────────────────────────
+type AlertLevel = "green" | "yellow" | "red";
+interface Alert { level: AlertLevel; icon: string; title: string; detail: string; }
+
+const ALERTS: Alert[] = [
+  DATA.loanToIncome > 5
+    ? { level:"red",    icon:"🚨", title:"Loan amount exceeds 5× annual income",   detail:`Loan is ${DATA.loanToIncome}× annual income — significantly above safe threshold of 5×` }
+    : DATA.loanToIncome > 3
+    ? { level:"yellow", icon:"⚠️", title:"Loan amount is moderately high vs income", detail:`Loan is ${DATA.loanToIncome}× annual income — within caution range (3–5×)` }
+    : { level:"green",  icon:"✅", title:"Loan amount is within safe range",          detail:`Loan is ${DATA.loanToIncome}× annual income — well within the 5× limit` },
+
+  DATA.creditUtilization > 50
+    ? { level:"red",    icon:"🚨", title:"Credit utilization critically high",       detail:`${DATA.creditUtilization}% utilization — exceeds 50% threshold; indicates credit stress` }
+    : DATA.creditUtilization > 30
+    ? { level:"yellow", icon:"⚠️", title:"Credit utilization above ideal range",     detail:`${DATA.creditUtilization}% utilization — above the recommended 30% ceiling` }
+    : { level:"green",  icon:"✅", title:"Credit utilization is healthy",             detail:`${DATA.creditUtilization}% utilization — well below the 30% recommended limit` },
+
+  DATA.dti > 50
+    ? { level:"red",    icon:"🚨", title:"Debt-to-income ratio is dangerously high", detail:`DTI of ${DATA.dti}% exceeds the 50% maximum threshold` }
+    : DATA.dti > 35
+    ? { level:"yellow", icon:"⚠️", title:"Debt-to-income ratio needs attention",     detail:`DTI of ${DATA.dti}% is above the safe limit of 35%` }
+    : { level:"green",  icon:"✅", title:"Debt-to-income ratio is within limits",     detail:`DTI of ${DATA.dti}% is comfortably below the 35% threshold` },
+
+  surplus < 0
+    ? { level:"red",    icon:"🚨", title:"Negative monthly surplus after EMI",       detail:"Applicant cannot meet EMI from monthly income — high default risk" }
+    : surplusPct < 15
+    ? { level:"yellow", icon:"⚠️", title:"Monthly surplus is thin after EMI",        detail:`Only ${surplusPct}% income remaining after expenses and EMI — limited buffer` }
+    : { level:"green",  icon:"✅", title:"Healthy surplus after all obligations",     detail:`${surplusPct}% income (₹${surplus.toLocaleString()}) remains after all deductions` },
+
+  DATA.creditScore < 600
+    ? { level:"red",    icon:"🚨", title:"Credit score is critically low",           detail:`Score of ${DATA.creditScore} is below the 600 minimum threshold` }
+    : DATA.creditScore < 700
+    ? { level:"yellow", icon:"⚠️", title:"Credit score is below optimal range",      detail:`Score of ${DATA.creditScore} is below the preferred 700 mark` }
+    : { level:"green",  icon:"✅", title:"Credit score meets requirements",           detail:`Score of ${DATA.creditScore} exceeds the minimum threshold of 700` },
 ];
 
-const TIMELINE = [
-  { label: "Application Submitted",  time: "10:42:00 AM", note: "All documents uploaded successfully",       status: "done"    },
-  { label: "Document Verification",  time: "10:42:01 AM", note: "PAN, Aadhar, salary slip — all verified",   status: "done"    },
-  { label: "Credit Bureau Check",    time: "10:42:01 AM", note: `CIBIL score pulled: ${APP.creditScore}`,    status: "done"    },
-  { label: "Risk Engine Evaluation", time: "10:42:02 AM", note: `Base score computed: ${APP.score}/100`,     status: "done"    },
-  { label: "ML Model Prediction",    time: "10:42:02 AM", note: `Confidence: ${APP.confidence}% → Approve`,  status: "done"    },
-  { label: "Final Decision",         time: "10:42:02 AM", note: "Loan approved — agreement dispatched",      status: "done"    },
-  { label: "Disbursement",           time: "Expected: 25 Mar 2024",note: "Pending e-signature",             status: "pending" },
-];
+const ALERT_STYLE: Record<AlertLevel, { bg: string; border: string; icon_bg: string; title: string; badge_bg: string; badge_border: string; badge_text: string; label: string }> = {
+  green:  { bg:"rgba(0,255,179,.05)",   border:"rgba(0,255,179,.2)",   icon_bg:"rgba(0,255,179,.12)",  title:"#00FFB3", badge_bg:"rgba(0,255,179,.1)",   badge_border:"rgba(0,255,179,.3)",   badge_text:"#00FFB3", label:"Clear"   },
+  yellow: { bg:"rgba(255,184,0,.05)",   border:"rgba(255,184,0,.22)",  icon_bg:"rgba(255,184,0,.12)",  title:"#FFB800", badge_bg:"rgba(255,184,0,.1)",    badge_border:"rgba(255,184,0,.3)",   badge_text:"#FFB800", label:"Caution" },
+  red:    { bg:"rgba(255,107,91,.06)",  border:"rgba(255,107,91,.25)", icon_bg:"rgba(255,107,91,.14)", title:"#FF6B5B", badge_bg:"rgba(255,107,91,.1)",   badge_border:"rgba(255,107,91,.3)",  badge_text:"#FF6B5B", label:"Risk"    },
+};
 
-const FACTORS = [
-  { label: "Credit Score",          impact: "High Positive", color: "#00FFB3", pct: 92 },
-  { label: "Debt-to-Income Ratio",  impact: "High Positive", color: "#00D4FF", pct: 88 },
-  { label: "Employment Stability",  impact: "Positive",      color: "#FF6BFF", pct: 76 },
-  { label: "Total Liabilities",     impact: "Positive",      color: "#FFB800", pct: 70 },
-  { label: "Credit Utilization",    impact: "Positive",      color: "#A855F7", pct: 65 },
-];
+const DC: Record<string,string> = { Approved:"#00FFB3", Review:"#FFB800", Rejected:"#FF6B5B" };
 
-const ALERTS = APP.latePayments > 0 || APP.dti > 40 || APP.creditUtilization > 50 || APP.defaults > 0
-  ? [
-      APP.latePayments > 0 && { type: "warning", icon: "⚠️", msg: `${APP.latePayments} late payment(s) in history — affects credit score` },
-      APP.dti > 40 && { type: "danger", icon: "🚨", msg: `High DTI of ${APP.dti}% — exceeds safe limit of 35%` },
-      APP.creditUtilization > 50 && { type: "warning", icon: "⚠️", msg: `Credit utilization ${APP.creditUtilization}% is high` },
-      APP.defaults > 0 && { type: "danger", icon: "🚨", msg: `${APP.defaults} loan default(s) detected` },
-    ].filter(Boolean)
-  : [];
-
-const DC = { Approved: "#00FFB3", Review: "#FFB800", Rejected: "#FF6B5B" };
-const RC = { Low: "#00FFB3", Medium: "#FFB800", High: "#FF6B5B" };
-
-function AnimNum({ to, prefix="", suffix="" }: { to: number; prefix?: string; suffix?: string }) {
-  const [v, setV] = useState(0);
-  useEffect(() => {
-    let c = 0; const step = to / 55;
-    const t = setInterval(() => { c += step; if (c >= to) { setV(to); clearInterval(t); } else setV(Math.floor(c)); }, 16);
-    return () => clearInterval(t);
-  }, [to]);
-  return <>{prefix}{v.toLocaleString()}{suffix}</>;
+function AnimBar({ target, color, delay=0 }: { target:number; color:string; delay?:number }) {
+  const [w, setW] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setW(target), delay); return () => clearTimeout(t); }, [target, delay]);
+  return (
+    <div style={{ height:"100%", width:`${w}%`, background:`linear-gradient(90deg,${color}70,${color})`, borderRadius:"inherit", boxShadow:`0 0 10px ${color}50`, transition:"width 1.2s cubic-bezier(.16,1,.3,1)" }}/>
+  );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export default function ApplicantProfile() {
-  const [mouse, setMouse] = useState({ x: -100, y: -100 });
-  const [scoreAnim, setScoreAnim] = useState(0);
-  const [barW, setBarW] = useState({ credit: 0, income: 0, dti: 0, emp: 0, debt: 0 });
-  const [factorW, setFactorW] = useState(FACTORS.map(() => 0));
-  const [tab, setTab] = useState<"overview"|"financial"|"decision"|"timeline">("overview");
+// ─── Page ─────────────────────────────────────────────────────────────────────
+export default function DecisionAnalysis() {
+  const [mouse, setMouse]       = useState({ x:-100, y:-100 });
+  const [visible, setVisible]   = useState(false);
 
-  useEffect(() => { window.addEventListener("mousemove", e => setMouse({ x: e.clientX, y: e.clientY })); }, []);
   useEffect(() => {
-    const t = setTimeout(() => {
-      let c = 0; const id = setInterval(() => { c += 1.7; if (c >= APP.score) { setScoreAnim(APP.score); clearInterval(id); } else setScoreAnim(Math.floor(c)); }, 18);
-    }, 300);
-    return () => clearTimeout(t);
-  }, []);
-  useEffect(() => {
-    const t = setTimeout(() => setBarW({ credit: BREAKDOWN.creditPts, income: BREAKDOWN.incomePts, dti: BREAKDOWN.dtiPts, emp: BREAKDOWN.empPts, debt: BREAKDOWN.debtPts }), 500);
-    return () => clearTimeout(t);
-  }, []);
-  useEffect(() => {
-    const t = setTimeout(() => setFactorW(FACTORS.map(f => f.pct)), 600);
+    window.addEventListener("mousemove", e => setMouse({ x:e.clientX, y:e.clientY }));
+    const t = setTimeout(() => setVisible(true), 100);
     return () => clearTimeout(t);
   }, []);
 
-  const decColor  = DC[APP.decision];
-  const riskColor = RC[APP.risk];
-  const surplus   = APP.monthlyIncome - APP.monthlyExpenses - APP.emi;
+  const decColor = DC[DATA.decision];
+
+  const summaryItems = [
+    { label:"Monthly Income",    value:`₹${DATA.monthlyIncome.toLocaleString()}`,    sub:"Gross monthly",         color:"#00FFB3", icon:"💰" },
+    { label:"Monthly Expenses",  value:`₹${DATA.monthlyExpenses.toLocaleString()}`,  sub:`${expPct}% of income`,  color:"#FFB800", icon:"🧾" },
+    { label:"Proposed EMI",      value:`₹${DATA.emi.toLocaleString()}`,              sub:`${emiPct}% of income`,  color:"#FF6BFF", icon:"🏦" },
+    { label:"Monthly Surplus",   value:`₹${surplus.toLocaleString()}`,               sub:`${surplusPct}% remaining`, color: surplus>0?"#00D4FF":"#FF6B5B", icon:"📊" },
+    { label:"Debt-to-Income",    value:`${DATA.dti}%`,                               sub: DATA.dti<=35?"Within limit":"Exceeds limit", color:DATA.dti>50?"#FF6B5B":DATA.dti>35?"#FFB800":"#00FFB3", icon:"⚖️" },
+    { label:"Credit Utilization",value:`${DATA.creditUtilization}%`,                sub: DATA.creditUtilization<=30?"Healthy":"Above ideal", color:DATA.creditUtilization>50?"#FF6B5B":DATA.creditUtilization>30?"#FFB800":"#00FFB3", icon:"💳" },
+  ];
+
+  const obligations = [
+    { label:"Monthly Income",    value:DATA.monthlyIncome,    pct:100,         color:"#00FFB3", desc:"Total gross income" },
+    { label:"Living Expenses",   value:DATA.monthlyExpenses,  pct:expPct,      color:"#FFB800", desc:`${expPct}% of income` },
+    { label:"Proposed EMI",      value:DATA.emi,              pct:emiPct,      color:"#FF6BFF", desc:`${emiPct}% of income` },
+    { label:"Monthly Surplus",   value:surplus,               pct:surplusPct,  color: surplus>0?"#00D4FF":"#FF6B5B", desc:`${surplusPct}% remaining` },
+  ];
+
+  const thresholds = [
+    { label:"Credit Score",       actual:`${DATA.creditScore}`,      benchmark:"≥ 700",   pass: DATA.creditScore>=700,      color:"#FF6BFF" },
+    { label:"DTI Ratio",          actual:`${DATA.dti}%`,             benchmark:"≤ 35%",   pass: DATA.dti<=35,               color:"#FFB800" },
+    { label:"Loan-to-Income",     actual:`${DATA.loanToIncome}×`,    benchmark:"≤ 5×",    pass: DATA.loanToIncome<=5,       color:"#00D4FF" },
+    { label:"Credit Utilization", actual:`${DATA.creditUtilization}%`,benchmark:"≤ 30%",  pass: DATA.creditUtilization<=30, color:"#00FFB3" },
+    { label:"Monthly Surplus",    actual:`₹${surplus.toLocaleString()}`, benchmark:"> ₹0", pass: surplus>0,                  color:"#A855F7" },
+  ];
+
+  if (!visible) return null;
 
   return (
     <div style={{ fontFamily:"'Outfit',sans-serif", background:"#050508", color:"#F0EEFF", minHeight:"100vh", cursor:"none" }}>
@@ -135,519 +130,358 @@ export default function ApplicantProfile() {
         ::-webkit-scrollbar-thumb{background:linear-gradient(#FF6BFF,#00D4FF);border-radius:2px;}
         @keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
         @keyframes gradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
         @keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(500%)}}
-        @keyframes blink{0%,100%{opacity:1}50%{opacity:0.1}}
-        @keyframes orbF{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-40px) scale(1.06)}}
-        @keyframes pulse{0%{transform:scale(1);opacity:.5}100%{transform:scale(2.4);opacity:0}}
-        @keyframes drawLine{from{stroke-dashoffset:600}to{stroke-dashoffset:0}}
-        .gt{background:linear-gradient(135deg,#FF6BFF 0%,#A855F7 30%,#00D4FF 65%,#00FFB3 100%);background-size:250% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 5s linear infinite}
-        .fu{animation:fadeUp .6s cubic-bezier(.16,1,.3,1) both}
-        .d1{animation-delay:.04s}.d2{animation-delay:.1s}.d3{animation-delay:.16s}.d4{animation-delay:.22s}.d5{animation-delay:.28s}.d6{animation-delay:.34s}.d7{animation-delay:.40s}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:.12}}
+        @keyframes orbF{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-28px)}}
+        @keyframes countUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .mono{font-family:'Space Mono',monospace}
-        .card{background:rgba(12,10,20,.78);border:1px solid rgba(255,255,255,.07);border-radius:18px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
-        .row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:9px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);margin-bottom:7px;transition:all .2s}
-        .row:hover{background:rgba(255,107,255,.05);border-color:rgba(255,107,255,.12)}
-        .tab{padding:9px 18px;border-radius:100px;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:none;transition:all .25s;border:1px solid transparent;color:rgba(240,238,255,.38);background:transparent}
-        .tab.on{background:linear-gradient(135deg,rgba(255,107,255,.18),rgba(0,212,255,.12));border-color:rgba(255,107,255,.3);color:#F0EEFF}
-        .tab:not(.on):hover{color:rgba(240,238,255,.65);border-color:rgba(255,255,255,.08)}
-        .btn{display:flex;align-items:center;gap:7px;padding:9px 18px;border-radius:10px;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:none;transition:all .25s}
-        .btn-ghost{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:rgba(240,238,255,.6)}
+        .fu{animation:fadeUp .6s cubic-bezier(.16,1,.3,1) both}
+        .d1{animation-delay:.06s}.d2{animation-delay:.12s}.d3{animation-delay:.18s}
+        .d4{animation-delay:.24s}.d5{animation-delay:.30s}.d6{animation-delay:.36s}
+        .card{background:rgba(10,9,18,.82);border:1px solid rgba(255,255,255,.07);border-radius:18px;backdrop-filter:blur(22px);overflow:hidden;position:relative}
+        .metric-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:20px 22px;position:relative;overflow:hidden;transition:all .3s;cursor:none}
+        .metric-card:hover{transform:translateY(-3px);border-color:rgba(255,107,255,.2);box-shadow:0 16px 40px rgba(255,107,255,.07)}
+        .btn-ghost{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:9px 18px;color:rgba(240,238,255,.6);font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;cursor:none;transition:all .25s}
         .btn-ghost:hover{border-color:rgba(255,107,255,.3);color:#F0EEFF}
-        .btn-primary{background:linear-gradient(135deg,#FF6BFF,#A855F7,#00D4FF);background-size:200% 200%;animation:gradShift 4s ease infinite;border:none;color:#fff}
-        .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 30px rgba(255,107,255,.35)}
-        .score-track{fill:none;stroke:rgba(255,255,255,.06)}
-        .score-fill{fill:none;stroke-linecap:round;transition:stroke-dashoffset 1.4s cubic-bezier(.16,1,.3,1)}
-        .bar-fill{transition:width 1.2s cubic-bezier(.16,1,.3,1)}
-        .rule-pass{background:rgba(0,255,179,.05);border:1px solid rgba(0,255,179,.18);border-radius:12px;padding:12px 16px;margin-bottom:8px}
-        .rule-fail{background:rgba(255,107,91,.05);border:1px solid rgba(255,107,91,.18);border-radius:12px;padding:12px 16px;margin-bottom:8px}
-        .tl-dot-done{width:12px;height:12px;border-radius:50%;background:#00FFB3;box-shadow:0 0 12px rgba(0,255,179,.55);flex-shrink:0;position:relative}
-        .tl-dot-done::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid #00FFB3;animation:pulse 2.5s ease-out infinite}
-        .tl-dot-pend{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.2);flex-shrink:0}
-        .alert-warn{background:rgba(255,184,0,.07);border:1px solid rgba(255,184,0,.25);border-radius:11px;padding:12px 16px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start}
-        .alert-danger{background:rgba(255,107,91,.07);border:1px solid rgba(255,107,91,.25);border-radius:11px;padding:12px 16px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start}
-        .section-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-        .section-label::before{content:'';display:inline-block;width:16px;height:2px;border-radius:1px;background:currentColor;opacity:.7}
-        .credit-line{fill:none;stroke-dasharray:600;animation:drawLine 1.8s cubic-bezier(.16,1,.3,1) forwards}
+        .chip{display:inline-flex;align-items:center;gap:6px;border-radius:100px;padding:5px 14px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.08em}
+        .section-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(240,238,255,.38);font-family:'Space Mono',monospace;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+        .section-title::before{content:'';display:inline-block;width:3px;height:14px;border-radius:2px;background:currentColor;opacity:.8}
+        .threshold-row{display:grid;grid-template-columns:1fr 80px 80px 80px;gap:0;align-items:center;padding:13px 18px;border-radius:10px;transition:background .2s;margin-bottom:6px}
+        .threshold-row:hover{background:rgba(255,107,255,.04)}
       `}</style>
 
       {/* Cursor */}
       <div style={{ position:"fixed", zIndex:9999, pointerEvents:"none", left:mouse.x-8, top:mouse.y-8, width:16, height:16, borderRadius:"50%", background:"radial-gradient(circle,#FF6BFF,#00D4FF)", boxShadow:"0 0 20px 6px rgba(255,107,255,.55)", mixBlendMode:"screen" }}/>
-      <div style={{ position:"fixed", zIndex:9998, pointerEvents:"none", left:mouse.x-28, top:mouse.y-28, width:56, height:56, borderRadius:"50%", border:"1px solid rgba(255,107,255,.2)", transition:"left .14s ease,top .14s ease" }}/>
+      <div style={{ position:"fixed", zIndex:9998, pointerEvents:"none", left:mouse.x-28, top:mouse.y-28, width:56, height:56, borderRadius:"50%", border:"1px solid rgba(255,107,255,.22)", transition:"left .14s ease,top .14s ease" }}/>
 
-      {/* Background */}
-      <div style={{ position:"fixed", width:600, height:600, borderRadius:"50%", background:"radial-gradient(circle,rgba(255,107,255,.08),transparent 70%)", top:"-10%", right:"5%", animation:"orbF 14s ease-in-out infinite", pointerEvents:"none", zIndex:0 }}/>
-      <div style={{ position:"fixed", width:400, height:400, borderRadius:"50%", background:"radial-gradient(circle,rgba(0,212,255,.06),transparent 70%)", bottom:"5%", left:"5%", animation:"orbF 11s ease-in-out infinite reverse", pointerEvents:"none", zIndex:0 }}/>
+      {/* BG */}
+      <div style={{ position:"fixed", width:500, height:500, borderRadius:"50%", background:"radial-gradient(circle,rgba(255,107,255,.08),transparent 70%)", top:"-8%", right:"8%", animation:"orbF 14s ease-in-out infinite", pointerEvents:"none", zIndex:0 }}/>
+      <div style={{ position:"fixed", width:380, height:380, borderRadius:"50%", background:"radial-gradient(circle,rgba(0,212,255,.06),transparent 70%)", bottom:"5%", left:"3%", animation:"orbF 11s ease-in-out infinite reverse", pointerEvents:"none", zIndex:0 }}/>
+      <div style={{ position:"fixed", width:300, height:300, borderRadius:"50%", background:"radial-gradient(circle,rgba(168,85,247,.06),transparent 70%)", top:"50%", left:"35%", animation:"orbF 16s ease-in-out infinite", pointerEvents:"none", zIndex:0 }}/>
       <div style={{ position:"fixed", inset:0, backgroundImage:"linear-gradient(rgba(255,107,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,107,255,.025) 1px,transparent 1px)", backgroundSize:"60px 60px", pointerEvents:"none", zIndex:0 }}/>
 
       {/* ── NAV ── */}
-      <nav style={{ position:"sticky", top:0, zIndex:50, height:62, background:"rgba(5,5,8,.88)", backdropFilter:"blur(24px)", borderBottom:"1px solid rgba(255,255,255,.05)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 36px" }}>
+      <nav style={{ position:"sticky", top:0, zIndex:50, height:62, background:"rgba(5,5,8,.9)", backdropFilter:"blur(24px)", borderBottom:"1px solid rgba(255,255,255,.05)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 40px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          <button className="btn btn-ghost" style={{ padding:"8px 14px" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-            Applications
-          </button>
-          <div style={{ width:1, height:22, background:"rgba(255,255,255,.07)" }}/>
-          <span style={{ fontSize:14, fontWeight:800 }}>{APP.name}</span>
-          <span className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.32)" }}>{APP.id}</span>
+          {/* Logo */}
+          <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+            <div style={{ position:"relative", width:32, height:32 }}>
+              <div style={{ position:"absolute", inset:0, borderRadius:8, background:"linear-gradient(135deg,#FF6BFF,#00D4FF)", padding:1.5 }}>
+                <div style={{ width:"100%", height:"100%", background:"#080810", borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M9 1.5L15.5 5V9C15.5 13 12.5 16.5 9 17.5C5.5 16.5 2.5 13 2.5 9V5L9 1.5Z" fill="url(#dg)"/><defs><linearGradient id="dg" x1="2.5" y1="1.5" x2="15.5" y2="17.5" gradientUnits="userSpaceOnUse"><stop stopColor="#FF6BFF"/><stop offset="1" stopColor="#00D4FF"/></linearGradient></defs></svg>
+                </div>
+              </div>
+            </div>
+            <span style={{ fontWeight:900, fontSize:17, letterSpacing:"-0.03em" }}>Finn<span style={{ background:"linear-gradient(135deg,#FF6BFF,#A855F7,#00D4FF,#00FFB3)", backgroundSize:"250% auto", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text", animation:"shimmer 5s linear infinite" }}>tel</span></span>
+          </div>
+          <div style={{ width:1, height:22, background:"rgba(255,255,255,.08)" }}/>
+          <div>
+            <div style={{ fontSize:14, fontWeight:800, letterSpacing:"-0.01em" }}>Decision Analysis</div>
+            <div className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.32)", letterSpacing:".06em" }}>{DATA.id} · {DATA.name}</div>
+          </div>
         </div>
-        <div style={{ display:"flex", gap:10 }}>
-          <button className="btn btn-ghost">
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          {/* Decision badge */}
+          <div className="chip" style={{ background:`${decColor}12`, border:`1px solid ${decColor}30`, color:decColor }}>
+            <div style={{ width:6, height:6, borderRadius:"50%", background:decColor, boxShadow:`0 0 8px ${decColor}`, animation:"blink 1.4s infinite" }}/>
+            {DATA.decision.toUpperCase()}
+          </div>
+          <button className="btn-ghost">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export PDF
-          </button>
-          <button className="btn btn-primary">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            Notify Applicant
+            Export
           </button>
         </div>
       </nav>
 
-      <main style={{ maxWidth:1280, margin:"0 auto", padding:"32px 36px", position:"relative", zIndex:1 }}>
+      <main style={{ maxWidth:1200, margin:"0 auto", padding:"36px 40px", position:"relative", zIndex:1 }}>
 
-        {/* ══════════════════════════════════════════════
-            SECTION 1 — APPLICANT HEADER
-        ══════════════════════════════════════════════ */}
-        <div className="fu d1" style={{ display:"grid", gridTemplateColumns:"auto 1fr auto", gap:24, alignItems:"center", marginBottom:24 }}>
-          {/* Avatar */}
-          <div style={{ position:"relative" }}>
-            <div style={{ width:86, height:86, borderRadius:"50%", background:"linear-gradient(135deg,rgba(255,107,255,.35),rgba(168,85,247,.3),rgba(0,212,255,.25))", border:"2px solid rgba(255,107,255,.35)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, fontWeight:900, boxShadow:"0 0 40px rgba(255,107,255,.22)" }}>
-              {APP.avatar}
+        {/* ── APPLICANT STRIP ── */}
+        <div className="fu d1 card" style={{ padding:"20px 28px", marginBottom:24, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,transparent,${decColor}80,transparent)`, animation:"scan 4s ease-in-out infinite", pointerEvents:"none" }}/>
+          <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+            <div style={{ width:52, height:52, borderRadius:"50%", background:`linear-gradient(135deg,${decColor}30,rgba(0,212,255,.2))`, border:`1.5px solid ${decColor}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:900 }}>
+              {DATA.avatar}
             </div>
-            <div style={{ position:"absolute", bottom:3, right:3, width:18, height:18, borderRadius:"50%", background:decColor, border:"2.5px solid #050508", boxShadow:`0 0 12px ${decColor}` }}/>
-          </div>
-
-          {/* Identity */}
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
-              <h1 style={{ fontSize:"clamp(22px,3vw,34px)", fontWeight:900, letterSpacing:"-0.03em" }}>{APP.name}</h1>
-              <span style={{ fontSize:13, color:"rgba(240,238,255,.4)", fontWeight:600 }}>Age {APP.age}</span>
-              {/* Risk Score pill */}
-              <div style={{ display:"flex", alignItems:"center", gap:6, background:`${riskColor}12`, border:`1px solid ${riskColor}30`, borderRadius:100, padding:"4px 14px" }}>
-                <div style={{ width:6, height:6, borderRadius:"50%", background:riskColor, boxShadow:`0 0 8px ${riskColor}`, animation:"blink 1.4s infinite" }}/>
-                <span className="mono" style={{ fontSize:10, color:riskColor, fontWeight:700, letterSpacing:".1em" }}>{APP.risk.toUpperCase()} RISK</span>
-              </div>
-            </div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:18 }}>
-              {[
-                { icon:"💼", v:`${APP.jobTitle} · ${APP.company}` },
-                { icon:"📍", v:APP.location },
-                { icon:"📧", v:APP.email },
-                { icon:"📱", v:APP.phone },
-              ].map(x => (
-                <div key={x.v} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"rgba(240,238,255,.45)", fontWeight:600 }}>
-                  <span>{x.icon}</span><span>{x.v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Score gauge + Decision */}
-          <div style={{ textAlign:"center", flexShrink:0 }}>
-            <div style={{ position:"relative", width:130, height:130, margin:"0 auto 10px" }}>
-              <svg width="130" height="130" viewBox="0 0 130 130">
-                <circle cx="65" cy="65" r="54" className="score-track" strokeWidth="10"/>
-                <circle cx="65" cy="65" r="54" className="score-fill" stroke={decColor} strokeWidth="10"
-                  strokeDasharray={`${2*Math.PI*54}`}
-                  strokeDashoffset={`${2*Math.PI*54*(1-scoreAnim/100)}`}
-                  transform="rotate(-90 65 65)"/>
-              </svg>
-              <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-                <div style={{ fontSize:36, fontWeight:900, color:decColor, textShadow:`0 0 24px ${decColor}60` }}>{scoreAnim}</div>
-                <div style={{ fontSize:9, color:"rgba(240,238,255,.35)", fontWeight:700 }}>RISK SCORE</div>
-              </div>
-            </div>
-            <div style={{ display:"flex", alignItems:"center", gap:7, justifyContent:"center", background:`${decColor}12`, border:`1px solid ${decColor}30`, borderRadius:100, padding:"6px 18px" }}>
-              <span>{APP.decision==="Approved"?"✅":APP.decision==="Review"?"⚠️":"❌"}</span>
-              <span className="mono" style={{ fontSize:11, color:decColor, fontWeight:700, letterSpacing:".1em" }}>{APP.decision.toUpperCase()}</span>
-            </div>
-            <div className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.3)", marginTop:6 }}>Confidence: {APP.confidence}%</div>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════════
-            SECTION 2 — LOAN SUMMARY STRIP
-        ══════════════════════════════════════════════ */}
-        <div className="card fu d2" style={{ padding:"20px 28px", marginBottom:24, display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:0 }}>
-          <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#FF6BFF,#00D4FF,transparent)", animation:"scan 3.5s ease-in-out infinite", pointerEvents:"none" }}/>
-          {[
-            { label:"Loan Amount",  value:`₹${(APP.loanAmount/100000).toFixed(1)}L`,   color:"#FF6BFF" },
-            { label:"Loan Type",    value:APP.loanType,                                  color:"#00D4FF" },
-            { label:"Interest Rate",value:`${APP.interestRate}% p.a.`,                  color:"#FFB800" },
-            { label:"Monthly EMI",  value:`₹${APP.emi.toLocaleString()}`,                color:"#00FFB3" },
-            { label:"Tenure",       value:`${APP.loanTenure} months`,                   color:"#A855F7" },
-            { label:"Applied",      value:APP.appliedAt.split(",")[0],                   color:"rgba(240,238,255,.5)" },
-          ].map((c, i) => (
-            <div key={c.label} style={{ padding:"0 20px", borderRight: i<5?"1px solid rgba(255,255,255,.06)":"none", textAlign:"center" }}>
-              <div style={{ fontSize:10, color:"rgba(240,238,255,.38)", fontWeight:700, letterSpacing:".05em", marginBottom:8, textTransform:"uppercase" }}>{c.label}</div>
-              <div style={{ fontSize:18, fontWeight:900, color:c.color, letterSpacing:"-0.02em" }}>{c.value}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* TABS */}
-        <div className="fu d3" style={{ display:"flex", gap:6, marginBottom:22, background:"rgba(255,255,255,.03)", border:"1px solid rgba(255,255,255,.06)", borderRadius:100, padding:5, width:"fit-content" }}>
-          {(["overview","financial","decision","timeline"] as const).map(t => (
-            <button key={t} className={`tab ${tab===t?"on":""}`} onClick={()=>setTab(t)}>
-              {t==="overview"?"👤 Overview":t==="financial"?"💰 Financial":t==="decision"?"🧠 Decision":"📅 Timeline"}
-            </button>
-          ))}
-        </div>
-
-        {/* ══════════════════════════════════════════════
-            TAB: OVERVIEW
-        ══════════════════════════════════════════════ */}
-        {tab === "overview" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:18 }}>
-
-            {/* Personal Details */}
-            <div className="card fu d3" style={{ padding:"24px" }}>
-              <div className="section-label" style={{ color:"#FF6BFF" }}>Personal Details</div>
-              {[
-                ["Full Name",         APP.name],
-                ["Age",               `${APP.age} years`],
-                ["Employment Type",   APP.employmentType],
-                ["Company",           APP.company],
-                ["Work Experience",   `${APP.workExp} years`],
-                ["Monthly Income",    `₹${APP.monthlyIncome.toLocaleString()}`],
-                ["Location",          APP.location],
-              ].map(([k,v]) => (
-                <div key={k} className="row">
-                  <span style={{ fontSize:12, color:"rgba(240,238,255,.42)", fontWeight:600 }}>{k}</span>
-                  <span style={{ fontSize:13, fontWeight:800 }}>{v}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Credit Profile */}
-            <div className="card fu d4" style={{ padding:"24px" }}>
-              <div className="section-label" style={{ color:"#00D4FF" }}>Credit Profile</div>
-              <div style={{ textAlign:"center", marginBottom:18, padding:"16px", background:"rgba(0,212,255,.05)", border:"1px solid rgba(0,212,255,.18)", borderRadius:14 }}>
-                <div style={{ fontSize:10, color:"rgba(240,238,255,.38)", fontWeight:700, letterSpacing:".08em", marginBottom:6 }}>CIBIL SCORE</div>
-                <div style={{ fontSize:52, fontWeight:900, letterSpacing:"-0.04em", background:"linear-gradient(135deg,#00D4FF,#00FFB3)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
-                  {APP.creditScore}
-                </div>
-                <div style={{ fontSize:12, color:APP.creditScore>=750?"#00FFB3":APP.creditScore>=700?"#00D4FF":"#FFB800", fontWeight:800, marginTop:4 }}>
-                  {APP.creditScore>=750?"Excellent":APP.creditScore>=700?"Good":APP.creditScore>=650?"Fair":"Poor"}
-                </div>
-                {/* Mini score bar */}
-                <div style={{ marginTop:10, height:5, background:"rgba(255,255,255,.06)", borderRadius:3, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${((APP.creditScore-300)/600)*100}%`, background:"linear-gradient(90deg,#FF6B5B,#FFB800,#00FFB3)", borderRadius:3 }}/>
-                </div>
-                <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
-                  <span className="mono" style={{ fontSize:8, color:"rgba(240,238,255,.25)" }}>300</span>
-                  <span className="mono" style={{ fontSize:8, color:"rgba(240,238,255,.25)" }}>900</span>
-                </div>
-              </div>
-              {[
-                ["Credit Age",        `${APP.creditAge} years`,             "rgba(240,238,255,.85)"],
-                ["Credit Accounts",   `${APP.creditAccounts} active`,       "rgba(240,238,255,.85)"],
-                ["Late Payments",     `${APP.latePayments}`,                APP.latePayments>0?"#FF6B5B":"#00FFB3"],
-                ["Defaults",          `${APP.defaults}`,                    APP.defaults>0?"#FF6B5B":"#00FFB3"],
-                ["Credit Utilization",`${APP.creditUtilization}%`,          APP.creditUtilization>50?"#FF6B5B":APP.creditUtilization>30?"#FFB800":"#00FFB3"],
-              ].map(([k,v,c]) => (
-                <div key={k} className="row">
-                  <span style={{ fontSize:12, color:"rgba(240,238,255,.42)", fontWeight:600 }}>{k}</span>
-                  <span style={{ fontSize:13, fontWeight:800, color:c as string }}>{v}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Risk Alerts */}
-            <div className="card fu d5" style={{ padding:"24px" }}>
-              <div className="section-label" style={{ color:"#FF6B5B" }}>Risk Alerts</div>
-              {ALERTS.length === 0 ? (
-                <div style={{ textAlign:"center", padding:"32px 20px" }}>
-                  <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
-                  <div style={{ fontSize:14, fontWeight:800, color:"#00FFB3", marginBottom:8 }}>No Risk Alerts</div>
-                  <div style={{ fontSize:12, color:"rgba(240,238,255,.4)", lineHeight:1.7 }}>All financial parameters are within acceptable limits. This is a clean profile.</div>
-                </div>
-              ) : (
-                ALERTS.map((a: any, i) => (
-                  <div key={i} className={a.type==="danger"?"alert-danger":"alert-warn"}>
-                    <span style={{ fontSize:16, flexShrink:0 }}>{a.icon}</span>
-                    <span style={{ fontSize:13, color:"rgba(240,238,255,.7)", lineHeight:1.6 }}>{a.msg}</span>
-                  </div>
-                ))
-              )}
-
-              {/* ML / AI Quick Summary */}
-              <div style={{ marginTop:16, padding:"16px", background:"linear-gradient(135deg,rgba(255,107,255,.07),rgba(0,212,255,.05))", border:"1px solid rgba(255,107,255,.18)", borderRadius:14 }}>
-                <div className="section-label" style={{ color:"#FF6BFF", marginBottom:12 }}>AI / ML Insight</div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-                  <div>
-                    <div style={{ fontSize:10, color:"rgba(240,238,255,.38)", fontWeight:700, marginBottom:4 }}>MODEL PREDICTION</div>
-                    <div style={{ fontSize:20, fontWeight:900, color:decColor }}>{APP.decision==="Approved"?"✅":APP.decision==="Review"?"⚠️":"❌"} {APP.decision}</div>
-                  </div>
-                  <div style={{ textAlign:"right" }}>
-                    <div style={{ fontSize:10, color:"rgba(240,238,255,.38)", fontWeight:700, marginBottom:4 }}>CONFIDENCE</div>
-                    <div style={{ fontSize:28, fontWeight:900, color:"#FF6BFF" }}>{APP.confidence}%</div>
-                  </div>
-                </div>
-                <div style={{ height:5, background:"rgba(255,255,255,.06)", borderRadius:3 }}>
-                  <div style={{ height:"100%", width:`${APP.confidence}%`, background:"linear-gradient(90deg,#FF6BFF,#00D4FF)", borderRadius:3, boxShadow:"0 0 10px rgba(255,107,255,.5)" }}/>
-                </div>
-                <div style={{ fontSize:11, color:"rgba(240,238,255,.4)", marginTop:8, lineHeight:1.6 }}>
-                  Logistic Regression model with SHAP explainability. Trained on 2.4M loan records.
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════
-            TAB: FINANCIAL
-        ══════════════════════════════════════════════ */}
-        {tab === "financial" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
-
-            {/* Financial Details */}
-            <div className="card fu d3" style={{ padding:"24px" }}>
-              <div className="section-label" style={{ color:"#FFB800" }}>Financial Details</div>
-              {[
-                ["Monthly Income",      `₹${APP.monthlyIncome.toLocaleString()}`,     "#00FFB3"],
-                ["Monthly Expenses",    `₹${APP.monthlyExpenses.toLocaleString()}`,    "#FFB800"],
-                ["Proposed EMI",        `₹${APP.emi.toLocaleString()}`,                "#FF6BFF"],
-                ["Monthly Surplus",     `₹${surplus.toLocaleString()}`,                surplus>0?"#00FFB3":"#FF6B5B"],
-                ["Existing Loans",      `${APP.existingLoans}`,                        APP.existingLoans>2?"#FFB800":"rgba(240,238,255,.85)"],
-                ["Total Liabilities",   `₹${APP.totalLiabilities.toLocaleString()}`,  APP.totalLiabilities>1000000?"#FF6B5B":"rgba(240,238,255,.85)"],
-                ["Credit Card Usage",   `₹${APP.creditCardUsage.toLocaleString()}/mo`, "#A855F7"],
-                ["Credit Utilization",  `${APP.creditUtilization}%`,                  APP.creditUtilization>50?"#FF6B5B":APP.creditUtilization>30?"#FFB800":"#00FFB3"],
-                ["Debt-to-Income",      `${APP.dti}%`,                                APP.dti>50?"#FF6B5B":APP.dti>35?"#FFB800":"#00FFB3"],
-              ].map(([k,v,c]) => (
-                <div key={k} className="row">
-                  <span style={{ fontSize:12, color:"rgba(240,238,255,.42)", fontWeight:600 }}>{k}</span>
-                  <span style={{ fontSize:13, fontWeight:800, color:c as string }}>{v}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Loan Details */}
-            <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
-              <div className="card fu d4" style={{ padding:"24px" }}>
-                <div className="section-label" style={{ color:"#00FFB3" }}>Loan Details</div>
-                {[
-                  ["Loan Amount",   `₹${APP.loanAmount.toLocaleString()}`],
-                  ["Loan Type",     APP.loanType],
-                  ["Tenure",        `${APP.loanTenure} months`],
-                  ["Interest Rate", `${APP.interestRate}% p.a.`],
-                  ["Monthly EMI",   `₹${APP.emi.toLocaleString()}`],
-                  ["Total Interest",`₹${(APP.emi*APP.loanTenure-APP.loanAmount).toLocaleString()}`],
-                  ["Total Payable", `₹${(APP.emi*APP.loanTenure).toLocaleString()}`],
-                ].map(([k,v]) => (
-                  <div key={k} className="row">
-                    <span style={{ fontSize:12, color:"rgba(240,238,255,.42)", fontWeight:600 }}>{k}</span>
-                    <span style={{ fontSize:13, fontWeight:800 }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* DTI Visual */}
-              <div className="card fu d5" style={{ padding:"24px" }}>
-                <div className="section-label" style={{ color:"#00D4FF" }}>Income vs Obligations</div>
-                {[
-                  { label:"Income",    value:APP.monthlyIncome, color:"#00FFB3", pct:100 },
-                  { label:"Expenses",  value:APP.monthlyExpenses, color:"#FFB800", pct:Math.round((APP.monthlyExpenses/APP.monthlyIncome)*100) },
-                  { label:"EMI",       value:APP.emi, color:"#FF6BFF", pct:Math.round((APP.emi/APP.monthlyIncome)*100) },
-                  { label:"Surplus",   value:surplus, color:"#00D4FF", pct:Math.round((surplus/APP.monthlyIncome)*100) },
-                ].map(b => (
-                  <div key={b.label} style={{ marginBottom:14 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:7 }}>
-                      <span style={{ fontSize:12, fontWeight:700, color:"rgba(240,238,255,.55)" }}>{b.label}</span>
-                      <div style={{ display:"flex", gap:10 }}>
-                        <span style={{ fontSize:12, fontWeight:800, color:b.color }}>₹{b.value.toLocaleString()}</span>
-                        <span className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.3)" }}>{b.pct}%</span>
-                      </div>
-                    </div>
-                    <div style={{ height:6, background:"rgba(255,255,255,.05)", borderRadius:3 }}>
-                      <div className="bar-fill" style={{ height:"100%", width:`${b.pct}%`, background:b.color, borderRadius:3, boxShadow:`0 0 10px ${b.color}55` }}/>
-                    </div>
-                  </div>
+            <div>
+              <div style={{ fontSize:18, fontWeight:900, letterSpacing:"-0.02em", marginBottom:4 }}>{DATA.name}</div>
+              <div style={{ display:"flex", gap:14 }}>
+                {[DATA.id, DATA.loanType, `Applied: ${DATA.appliedDate}`].map(v => (
+                  <span key={v} className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.35)", letterSpacing:".06em" }}>{v}</span>
                 ))}
               </div>
             </div>
           </div>
-        )}
+          <div style={{ display:"flex", gap:24 }}>
+            {[
+              { label:"Loan Amount",    value:`₹${(DATA.loanAmount/100000).toFixed(1)}L`,   color:"#F0EEFF" },
+              { label:"Interest Rate",  value:`${DATA.interestRate}%`,                       color:"#FFB800" },
+              { label:"Tenure",         value:`${DATA.tenure} months`,                       color:"#F0EEFF" },
+              { label:"Decision",       value:DATA.decision,                                 color:decColor },
+            ].map(x => (
+              <div key={x.label} style={{ textAlign:"right" }}>
+                <div style={{ fontSize:10, color:"rgba(240,238,255,.35)", fontWeight:700, letterSpacing:".06em", marginBottom:4, textTransform:"uppercase" }}>{x.label}</div>
+                <div style={{ fontSize:16, fontWeight:900, color:x.color }}>{x.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* ══════════════════════════════════════════════
-            TAB: DECISION
+            SECTION 1 — RISK ALERTS
         ══════════════════════════════════════════════ */}
-        {tab === "decision" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
-
-            {/* Score Breakdown */}
-            <div className="card fu d3" style={{ padding:"26px" }}>
-              <div className="section-label" style={{ color:"#FF6BFF" }}>Decision Intelligence — Score Breakdown</div>
-              <div style={{ display:"flex", justifyContent:"center", marginBottom:22 }}>
-                <div style={{ textAlign:"center", padding:"18px 40px", background:"rgba(255,255,255,.03)", border:"1px solid rgba(255,255,255,.07)", borderRadius:16 }}>
-                  <div style={{ fontSize:10, color:"rgba(240,238,255,.38)", fontWeight:700, letterSpacing:".1em", marginBottom:6 }}>FINAL RISK SCORE</div>
-                  <div style={{ fontSize:56, fontWeight:900, letterSpacing:"-0.04em", color:decColor, textShadow:`0 0 30px ${decColor}50` }}>{APP.score}</div>
-                  <div style={{ fontSize:12, color:"rgba(240,238,255,.35)" }}>out of 100</div>
-                  <div style={{ marginTop:10, display:"flex", gap:6 }}>
-                    {["Credit","Income","DTI","Emp","Debt"].map(l => (
-                      <div key={l} style={{ flex:1, height:3, borderRadius:2, background:"rgba(255,107,255,.3)", boxShadow:"0 0 6px rgba(255,107,255,.4)" }}/>
-                    ))}
+        <div className="fu d2" style={{ marginBottom:24 }}>
+          <div className="section-title" style={{ color:"rgba(240,238,255,.38)", marginBottom:14 }}>Risk Alerts</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+            {ALERTS.map((a, i) => {
+              const s = ALERT_STYLE[a.level];
+              return (
+                <div key={i} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:14, padding:"16px 18px", display:"flex", gap:14, alignItems:"flex-start", transition:"transform .25s", cursor:"none" }}
+                  onMouseEnter={e=>(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}
+                  onMouseLeave={e=>(e.currentTarget as HTMLElement).style.transform="translateY(0)"}>
+                  <div style={{ width:36, height:36, borderRadius:10, background:s.icon_bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>
+                    {a.icon}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:5 }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:s.title, lineHeight:1.3, paddingRight:8 }}>{a.title}</div>
+                      <span className="chip" style={{ background:s.badge_bg, border:`1px solid ${s.badge_border}`, color:s.badge_text, fontSize:9, padding:"3px 9px", flexShrink:0 }}>
+                        {s.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:12, color:"rgba(240,238,255,.5)", lineHeight:1.6, fontWeight:500 }}>{a.detail}</div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════
+            SECTION 2 — FINANCIAL SUMMARY
+        ══════════════════════════════════════════════ */}
+        <div className="fu d3" style={{ marginBottom:24 }}>
+          <div className="section-title" style={{ color:"rgba(240,238,255,.38)", marginBottom:14 }}>Financial Summary</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:12 }}>
+            {summaryItems.map((c, i) => (
+              <div key={c.label} className="metric-card"
+                style={{ borderColor:`${c.color}18` }}
+                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor=`${c.color}35`; el.style.boxShadow=`0 16px 40px ${c.color}10`; }}
+                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor=`${c.color}18`; el.style.boxShadow="none"; }}>
+                {/* top glow */}
+                <div style={{ position:"absolute", top:-24, right:-24, width:80, height:80, borderRadius:"50%", background:`radial-gradient(circle,${c.color}15,transparent)`, pointerEvents:"none" }}/>
+                <div style={{ fontSize:20, marginBottom:12 }}>{c.icon}</div>
+                <div style={{ fontSize:10, fontWeight:700, color:"rgba(240,238,255,.38)", letterSpacing:".08em", textTransform:"uppercase", marginBottom:6 }}>{c.label}</div>
+                <div style={{ fontSize:22, fontWeight:900, color:c.color, letterSpacing:"-0.02em", lineHeight:1, marginBottom:5 }}>
+                  {c.value}
+                </div>
+                <div style={{ fontSize:11, color:"rgba(240,238,255,.38)", fontWeight:600 }}>{c.sub}</div>
+                {/* Bottom accent line */}
+                <div style={{ position:"absolute", bottom:0, left:0, right:0, height:2, background:`linear-gradient(90deg,transparent,${c.color}50,transparent)` }}/>
               </div>
-              {[
-                { label:"Credit Score Contribution",  pts:barW.credit,  max:30, color:"#FF6BFF", desc:`Score ${APP.creditScore} → ${BREAKDOWN.creditPts}/30 pts` },
-                { label:"Income Contribution",         pts:barW.income,  max:25, color:"#00D4FF", desc:`₹${(APP.annualIncome/100000).toFixed(1)}L/yr → ${BREAKDOWN.incomePts}/25 pts` },
-                { label:"DTI Ratio Impact",            pts:barW.dti,     max:20, color:"#FFB800", desc:`DTI ${APP.dti}% → ${BREAKDOWN.dtiPts}/20 pts` },
-                { label:"Employment Stability",        pts:barW.emp,     max:15, color:"#00FFB3", desc:`${APP.workExp} yrs tenure → ${BREAKDOWN.empPts}/15 pts` },
-                { label:"Debt Impact",                 pts:barW.debt,    max:10, color:"#A855F7", desc:`₹${(APP.totalLiabilities/100000).toFixed(1)}L liabilities → ${BREAKDOWN.debtPts}/10 pts` },
-              ].map(b => (
-                <div key={b.label} style={{ marginBottom:18 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+            ))}
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════
+            SECTION 3 — INCOME VS OBLIGATIONS VISUALIZATION
+        ══════════════════════════════════════════════ */}
+        <div className="fu d4 card" style={{ padding:"28px 32px", marginBottom:24 }}>
+          <div className="section-title" style={{ color:"rgba(240,238,255,.38)" }}>Income vs Obligations</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:40, alignItems:"center" }}>
+
+            {/* Bars */}
+            <div>
+              {obligations.map((o, i) => (
+                <div key={o.label} style={{ marginBottom:22 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:9 }}>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:800, marginBottom:3 }}>{b.label}</div>
-                      <div style={{ fontSize:11, color:"rgba(240,238,255,.38)", fontWeight:600 }}>{b.desc}</div>
-                    </div>
-                    <div style={{ textAlign:"right", flexShrink:0, marginLeft:12 }}>
-                      <span style={{ fontSize:20, fontWeight:900, color:b.color }}>+{b.pts}</span>
-                      <span className="mono" style={{ fontSize:11, color:"rgba(240,238,255,.3)" }}>/{b.max}</span>
-                    </div>
-                  </div>
-                  <div style={{ height:7, background:"rgba(255,255,255,.05)", borderRadius:4, overflow:"hidden" }}>
-                    <div className="bar-fill" style={{ height:"100%", width:`${(b.pts/b.max)*100}%`, background:`linear-gradient(90deg,${b.color}80,${b.color})`, borderRadius:4, boxShadow:`0 0 12px ${b.color}55` }}/>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
-              {/* Rule Engine */}
-              <div className="card fu d4" style={{ padding:"24px" }}>
-                <div className="section-label" style={{ color:"#00FFB3" }}>Rule Engine Output</div>
-                {RULES.map((r, i) => (
-                  <div key={i} className={r.result?"rule-pass":"rule-fail"}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
-                          <span style={{ fontSize:13, color:r.result?"#00FFB3":"#FF6B5B", fontWeight:700 }}>{r.result?"✓":"✕"}</span>
-                          <span style={{ fontSize:13, fontWeight:800 }}>{r.rule}</span>
-                        </div>
-                        <div style={{ fontSize:11, color:"rgba(240,238,255,.48)", paddingLeft:22 }}>{r.reason}</div>
-                      </div>
-                      <div style={{ flexShrink:0, marginLeft:12 }}>
-                        <span style={{ fontSize:10, fontWeight:800, background:r.result?"rgba(0,255,179,.1)":"rgba(255,107,91,.1)", color:r.result?"#00FFB3":"#FF6B5B", border:`1px solid ${r.result?"rgba(0,255,179,.25)":"rgba(255,107,91,.25)"}`, padding:"3px 10px", borderRadius:100, whiteSpace:"nowrap" }}>{r.impact}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Top ML Factors */}
-              <div className="card fu d5" style={{ padding:"24px" }}>
-                <div className="section-label" style={{ color:"#A855F7" }}>ML Model — Top Influencing Factors</div>
-                <div style={{ marginBottom:14, padding:"10px 14px", background:"rgba(168,85,247,.07)", border:"1px solid rgba(168,85,247,.2)", borderRadius:10 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <div>
-                      <div style={{ fontSize:10, color:"rgba(240,238,255,.38)", fontWeight:700, marginBottom:3 }}>MODEL PREDICTION</div>
-                      <div style={{ fontSize:16, fontWeight:900, color:decColor }}>{APP.decision==="Approved"?"✅":"❌"} {APP.decision}</div>
+                      <div style={{ fontSize:14, fontWeight:800, color:"rgba(240,238,255,.85)", marginBottom:2 }}>{o.label}</div>
+                      <div style={{ fontSize:11, color:"rgba(240,238,255,.4)", fontWeight:600 }}>{o.desc}</div>
                     </div>
                     <div style={{ textAlign:"right" }}>
-                      <div style={{ fontSize:10, color:"rgba(240,238,255,.38)", fontWeight:700, marginBottom:3 }}>CONFIDENCE</div>
-                      <div style={{ fontSize:24, fontWeight:900, color:"#A855F7" }}>{APP.confidence}%</div>
+                      <div style={{ fontSize:18, fontWeight:900, color:o.color, letterSpacing:"-0.02em" }}>₹{o.value.toLocaleString()}</div>
+                      <div className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.35)" }}>{o.pct}% of income</div>
+                    </div>
+                  </div>
+                  {/* Track */}
+                  <div style={{ height:10, background:"rgba(255,255,255,.05)", borderRadius:5, overflow:"hidden" }}>
+                    <AnimBar target={o.pct} color={o.color} delay={400 + i * 120}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Stacked visual + legend */}
+            <div>
+              {/* Stacked bar */}
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"rgba(240,238,255,.4)", marginBottom:10, letterSpacing:".06em", textTransform:"uppercase", fontFamily:"'Space Mono',monospace" }}>Income Allocation</div>
+                <div style={{ display:"flex", height:48, borderRadius:10, overflow:"hidden", gap:2 }}>
+                  {[
+                    { pct:expPct,      color:"#FFB800", label:"Expenses" },
+                    { pct:emiPct,      color:"#FF6BFF", label:"EMI" },
+                    { pct:surplusPct,  color: surplus>0?"#00D4FF":"#FF6B5B", label:"Surplus" },
+                  ].map((seg, i) => (
+                    <div key={i} style={{ flex:seg.pct, background:`linear-gradient(135deg,${seg.color}80,${seg.color})`, display:"flex", alignItems:"center", justifyContent:"center", minWidth:seg.pct<8?0:undefined, transition:"flex 1.2s cubic-bezier(.16,1,.3,1)" }}>
+                      {seg.pct >= 10 && <span style={{ fontSize:11, fontWeight:900, color:"#050508", letterSpacing:".04em" }}>{seg.pct}%</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+                {[
+                  { color:"#00FFB3", label:"Total Income",   value:`₹${DATA.monthlyIncome.toLocaleString()}` },
+                  { color:"#FFB800", label:"Expenses",        value:`₹${DATA.monthlyExpenses.toLocaleString()} (${expPct}%)` },
+                  { color:"#FF6BFF", label:"EMI",             value:`₹${DATA.emi.toLocaleString()} (${emiPct}%)` },
+                  { color: surplus>0?"#00D4FF":"#FF6B5B", label:"Surplus", value:`₹${surplus.toLocaleString()} (${surplusPct}%)` },
+                ].map(l => (
+                  <div key={l.label} style={{ display:"flex", alignItems:"center", gap:9, padding:"10px 14px", background:"rgba(255,255,255,.025)", borderRadius:10, border:"1px solid rgba(255,255,255,.05)" }}>
+                    <div style={{ width:10, height:10, borderRadius:3, background:l.color, boxShadow:`0 0 8px ${l.color}60`, flexShrink:0 }}/>
+                    <div>
+                      <div style={{ fontSize:11, color:"rgba(240,238,255,.45)", fontWeight:700 }}>{l.label}</div>
+                      <div style={{ fontSize:13, fontWeight:800, color:l.color }}>{l.value}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Surplus health indicator */}
+              <div style={{ padding:"14px 18px", background: surplus>0?"rgba(255,107,255,.06)":"rgba(255,107,91,.07)", border:`1px solid ${surplus>0?"rgba(255,107,255,.2)":"rgba(255,107,91,.25)"}`, borderRadius:12 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:18 }}>{surplus>0?"💡":"⚠️"}</span>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:800, color: surplus>0?"#FF6BFF":"#FF6B5B", marginBottom:3 }}>
+                      {surplus>0 ? "Repayment capacity looks healthy" : "Insufficient surplus for EMI"}
+                    </div>
+                    <div style={{ fontSize:11, color:"rgba(240,238,255,.45)", lineHeight:1.6 }}>
+                      {surplus>0
+                        ? `After all deductions, ₹${surplus.toLocaleString()}/mo remains — providing a comfortable repayment buffer.`
+                        : "Monthly obligations exceed income. Loan repayment is at high risk of default."}
                     </div>
                   </div>
                 </div>
-                {FACTORS.map((f, i) => (
-                  <div key={f.label} style={{ marginBottom:14 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:7 }}>
-                      <div>
-                        <div style={{ fontSize:13, fontWeight:700 }}>{f.label}</div>
-                        <div style={{ fontSize:10, color:f.color, fontWeight:700 }}>{f.impact}</div>
-                      </div>
-                      <span className="mono" style={{ fontSize:13, color:f.color, fontWeight:700 }}>{factorW[i]}%</span>
-                    </div>
-                    <div style={{ height:5, background:"rgba(255,255,255,.05)", borderRadius:3 }}>
-                      <div className="bar-fill" style={{ height:"100%", width:`${factorW[i]}%`, background:`linear-gradient(90deg,${f.color}70,${f.color})`, borderRadius:3, boxShadow:`0 0 10px ${f.color}50` }}/>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* ══════════════════════════════════════════════
-            TAB: TIMELINE
+            SECTION 4 — FINANCIAL THRESHOLDS
         ══════════════════════════════════════════════ */}
-        {tab === "timeline" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 360px", gap:18 }}>
+        <div className="fu d5 card" style={{ padding:"28px 32px", marginBottom:24 }}>
+          <div className="section-title" style={{ color:"rgba(240,238,255,.38)" }}>Key Financial Thresholds</div>
+          {/* Header */}
+          <div className="threshold-row" style={{ padding:"8px 18px", marginBottom:4 }}>
+            {["Parameter","Applicant Value","Benchmark","Status"].map(h => (
+              <span key={h} className="mono" style={{ fontSize:9, color:"rgba(240,238,255,.28)", letterSpacing:".12em", textTransform:"uppercase" }}>{h}</span>
+            ))}
+          </div>
+          <div style={{ borderTop:"1px solid rgba(255,255,255,.05)", marginBottom:10 }}/>
+          {thresholds.map((t, i) => (
+            <div key={t.label} className="threshold-row">
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:8, height:8, borderRadius:2, background:t.color, boxShadow:`0 0 8px ${t.color}70` }}/>
+                <span style={{ fontSize:14, fontWeight:700 }}>{t.label}</span>
+              </div>
+              <span style={{ fontSize:16, fontWeight:900, color:t.color }}>{t.actual}</span>
+              <span className="mono" style={{ fontSize:12, color:"rgba(240,238,255,.4)" }}>{t.benchmark}</span>
+              <div>
+                <span className="chip" style={{
+                  background: t.pass?"rgba(0,255,179,.08)":"rgba(255,107,91,.08)",
+                  border:`1px solid ${t.pass?"rgba(0,255,179,.25)":"rgba(255,107,91,.25)"}`,
+                  color: t.pass?"#00FFB3":"#FF6B5B",
+                  fontSize:10
+                }}>
+                  {t.pass ? "✓  Passed" : "✕  Failed"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
 
-            {/* Timeline */}
-            <div className="card fu d3" style={{ padding:"28px" }}>
-              <div className="section-label" style={{ color:"#00FFB3" }}>Application Timeline</div>
-              <div style={{ position:"relative" }}>
-                <div style={{ position:"absolute", left:5, top:12, bottom:12, width:2, background:"linear-gradient(180deg,#00FFB3,rgba(255,255,255,.06))", borderRadius:1 }}/>
-                {TIMELINE.map((item, i) => (
-                  <div key={i} style={{ display:"flex", gap:22, marginBottom:i<TIMELINE.length-1?24:0, position:"relative" }}>
-                    <div className={item.status==="done"?"tl-dot-done":"tl-dot-pend"} style={{ marginTop:4 }}/>
-                    <div style={{ flex:1, padding:"16px 20px", background: item.status==="done"?"rgba(0,255,179,.04)":"rgba(255,255,255,.02)", border:`1px solid ${item.status==="done"?"rgba(0,255,179,.15)":"rgba(255,255,255,.06)"}`, borderRadius:14 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                          <span style={{ fontSize:14, fontWeight:900, color: item.status==="done"?"#F0EEFF":"rgba(240,238,255,.4)" }}>{item.label}</span>
-                          <span style={{ fontSize:11, fontWeight:800, color:item.status==="done"?"#00FFB3":"#FFB800", background:item.status==="done"?"rgba(0,255,179,.1)":"rgba(255,184,0,.1)", border:`1px solid ${item.status==="done"?"rgba(0,255,179,.25)":"rgba(255,184,0,.25)"}`, padding:"2px 10px", borderRadius:100 }}>
-                            {item.status==="done"?"Completed":"Pending"}
-                          </span>
-                        </div>
-                        <span className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.3)" }}>{item.time}</span>
-                      </div>
-                      <div style={{ fontSize:12, color:"rgba(240,238,255,.5)", fontWeight:600 }}>{item.note}</div>
-                    </div>
+        {/* ══════════════════════════════════════════════
+            SECTION 5 — DECISION TRANSPARENCY
+        ══════════════════════════════════════════════ */}
+        <div className="fu d6">
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+
+            {/* Verdict card */}
+            <div className="card" style={{ padding:"28px 32px", background:`linear-gradient(135deg,${decColor}09,rgba(0,212,255,.05))`, borderColor:`${decColor}25`, position:"relative", overflow:"hidden" }}>
+              <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,transparent,${decColor},transparent)`, animation:"scan 3.5s ease-in-out infinite", pointerEvents:"none" }}/>
+              <div style={{ position:"absolute", top:-50, right:-50, width:160, height:160, borderRadius:"50%", background:`radial-gradient(circle,${decColor}12,transparent)`, pointerEvents:"none" }}/>
+              <div className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.38)", letterSpacing:".14em", marginBottom:14 }}>FINAL DECISION</div>
+              <div style={{ fontSize:38, fontWeight:900, color:decColor, letterSpacing:"-0.03em", textShadow:`0 0 30px ${decColor}50`, marginBottom:10 }}>
+                {DATA.decision==="Approved"?"✅":DATA.decision==="Review"?"⚠️":"❌"} {DATA.decision}
+              </div>
+              <div style={{ fontSize:14, color:"rgba(240,238,255,.55)", lineHeight:1.75, marginBottom:18 }}>
+                {DATA.decision==="Approved"
+                  ? `${DATA.name}'s application for ₹${(DATA.loanAmount/100000).toFixed(1)}L has been approved. All key financial indicators are within acceptable limits and the repayment capacity is adequate.`
+                  : DATA.decision==="Review"
+                  ? `${DATA.name}'s application requires manual review. One or more financial parameters need further verification before a decision can be issued.`
+                  : `${DATA.name}'s application has been declined. One or more financial parameters exceed the acceptable risk thresholds for this loan amount.`
+                }
+              </div>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                {[
+                  { label:"Application ID", value:DATA.id },
+                  { label:"Loan Type",      value:DATA.loanType },
+                  { label:"Decision Date",  value:DATA.appliedDate },
+                ].map(x => (
+                  <div key={x.label} style={{ padding:"7px 14px", background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.07)", borderRadius:8 }}>
+                    <div style={{ fontSize:10, color:"rgba(240,238,255,.35)", fontWeight:700, marginBottom:2 }}>{x.label}</div>
+                    <div style={{ fontSize:12, fontWeight:800 }}>{x.value}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Processing Summary */}
-            <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
-              <div className="card fu d4" style={{ padding:"24px" }}>
-                <div className="section-label" style={{ color:"#FF6BFF" }}>Processing Summary</div>
-                {[
-                  ["Application ID",  APP.id,              "rgba(240,238,255,.85)"],
-                  ["Applied On",      APP.appliedAt,       "rgba(240,238,255,.85)"],
-                  ["Processed On",    APP.processedAt,     "rgba(240,238,255,.85)"],
-                  ["Processing Time", APP.processingTime,  "#00FFB3"],
-                  ["Decision",        APP.decision,        decColor],
-                  ["Risk Level",      APP.risk,            riskColor],
-                  ["Risk Score",      `${APP.score}/100`,  decColor],
-                  ["ML Confidence",   `${APP.confidence}%`,"#A855F7"],
-                ].map(([k,v,c]) => (
-                  <div key={k} className="row">
-                    <span style={{ fontSize:12, color:"rgba(240,238,255,.42)", fontWeight:600 }}>{k}</span>
-                    <span style={{ fontSize:12, fontWeight:800, color:c as string }}>{v}</span>
-                  </div>
-                ))}
+            {/* Transparency disclaimer */}
+            <div className="card" style={{ padding:"28px 32px" }}>
+              <div className="mono" style={{ fontSize:10, color:"rgba(240,238,255,.38)", letterSpacing:".14em", marginBottom:18 }}>DECISION TRANSPARENCY</div>
+
+              {/* Key statement */}
+              <div style={{ padding:"18px 20px", background:"linear-gradient(135deg,rgba(255,107,255,.07),rgba(168,85,247,.05))", border:"1px solid rgba(255,107,255,.2)", borderRadius:14, marginBottom:18 }}>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
+                  <span style={{ fontSize:22, flexShrink:0 }}>⚖️</span>
+                  <p style={{ fontSize:14, color:"rgba(240,238,255,.75)", lineHeight:1.75, fontWeight:500 }}>
+                    This decision is based on <strong style={{ background:"linear-gradient(135deg,#FF6BFF,#00D4FF)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>predefined financial rules and risk thresholds</strong>. No subjective judgment or manual override has been applied. The evaluation is consistent, transparent, and applied uniformly to all applications.
+                  </p>
+                </div>
               </div>
 
-              {/* Next Steps */}
-              <div className="card fu d5" style={{ padding:"24px" }}>
-                <div className="section-label" style={{ color:"#00D4FF" }}>Next Steps</div>
-                {(APP.decision==="Approved"
-                  ? [
-                      { icon:"📄", text:"Loan agreement sent to applicant's email" },
-                      { icon:"✍️", text:"Awaiting e-signature on agreement" },
-                      { icon:"💳", text:"Disbursement expected by 25 Mar 2024" },
-                      { icon:"📱", text:"SMS & email confirmation dispatched" },
-                    ]
-                  : [
-                      { icon:"📄", text:"Rejection letter sent to applicant" },
-                      { icon:"📞", text:"Applicant may appeal within 30 days" },
-                      { icon:"🔄", text:"Reapplication allowed after 90 days" },
-                    ]
-                ).map((s, i) => (
-                  <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start", padding:"10px 12px", background:"rgba(0,212,255,.04)", border:"1px solid rgba(0,212,255,.1)", borderRadius:10, marginBottom:8 }}>
-                    <span style={{ fontSize:14, flexShrink:0 }}>{s.icon}</span>
-                    <span style={{ fontSize:12, color:"rgba(240,238,255,.62)", lineHeight:1.65, fontWeight:600 }}>{s.text}</span>
-                  </div>
-                ))}
+              {/* What was evaluated */}
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"rgba(240,238,255,.45)", letterSpacing:".06em", textTransform:"uppercase", marginBottom:12 }}>What was evaluated</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  {[
+                    { icon:"💳", label:"Credit score & history" },
+                    { icon:"💰", label:"Income & repayment ability" },
+                    { icon:"⚖️", label:"Debt-to-income ratio" },
+                    { icon:"📊", label:"Credit utilization level" },
+                    { icon:"🏦", label:"Loan-to-income ratio" },
+                    { icon:"📈", label:"Monthly surplus capacity" },
+                  ].map(x => (
+                    <div key={x.label} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", background:"rgba(255,255,255,.025)", border:"1px solid rgba(255,107,255,.08)", borderRadius:9 }}>
+                      <span style={{ fontSize:14 }}>{x.icon}</span>
+                      <span style={{ fontSize:12, color:"rgba(240,238,255,.6)", fontWeight:600 }}>{x.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Disclaimer */}
+              <div style={{ padding:"12px 16px", background:"rgba(255,255,255,.025)", border:"1px solid rgba(255,255,255,.06)", borderRadius:10 }}>
+                <p style={{ fontSize:11, color:"rgba(240,238,255,.38)", lineHeight:1.7 }}>
+                  For queries or appeals, applicants may contact the Finntel credit review team within 30 days of this decision. All financial data submitted is treated as confidential under applicable data protection regulations.
+                </p>
               </div>
             </div>
           </div>
-        )}
+        </div>
+
       </main>
     </div>
   );
