@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Decision = "Approved" | "Rejected" | "Pending" | "Review";
@@ -24,57 +25,14 @@ interface Override {
   reason: string; admin: string; date: string;
 }
 
-// ─── Seed Data ────────────────────────────────────────────────────────────────
-const APPS: Application[] = [
-  { id: "#FNT-4821", name: "Arjun Mehta", avatar: "AM", amount: 1200000, score: 91, risk: "Low", status: "Approved", date: "23 Mar", dti: 5, income: 1840000, creditScore: 784 },
-  { id: "#FNT-4820", name: "Priya Sharma", avatar: "PS", amount: 850000, score: 58, risk: "Medium", status: "Review", date: "23 Mar", dti: 38, income: 720000, creditScore: 632 },
-  { id: "#FNT-4819", name: "Rohan Das", avatar: "RD", amount: 2500000, score: 29, risk: "High", status: "Rejected", date: "22 Mar", dti: 72, income: 380000, creditScore: 520 },
-  { id: "#FNT-4818", name: "Kavya Nair", avatar: "KN", amount: 575000, score: 84, risk: "Low", status: "Approved", date: "22 Mar", dti: 12, income: 1100000, creditScore: 768 },
-  { id: "#FNT-4817", name: "Vikram Singh", avatar: "VS", amount: 1800000, score: 47, risk: "Medium", status: "Pending", date: "22 Mar", dti: 41, income: 950000, creditScore: 648 },
-  { id: "#FNT-4816", name: "Sneha Pillai", avatar: "SP", amount: 320000, score: 76, risk: "Low", status: "Approved", date: "21 Mar", dti: 18, income: 620000, creditScore: 710 },
-  { id: "#FNT-4815", name: "Aditya Kumar", avatar: "AK", amount: 4000000, score: 18, risk: "High", status: "Rejected", date: "21 Mar", dti: 81, income: 280000, creditScore: 490 },
-  { id: "#FNT-4814", name: "Meera Iyer", avatar: "MI", amount: 3000000, score: 88, risk: "Low", status: "Approved", date: "21 Mar", dti: 14, income: 2200000, creditScore: 810 },
-  { id: "#FNT-4813", name: "Suresh Rao", avatar: "SR", amount: 600000, score: 62, risk: "Medium", status: "Pending", date: "20 Mar", dti: 33, income: 450000, creditScore: 670 },
-  { id: "#FNT-4812", name: "Divya Thomas", avatar: "DT", amount: 1500000, score: 79, risk: "Low", status: "Approved", date: "20 Mar", dti: 22, income: 1500000, creditScore: 745 },
-];
-
-const RULES_INIT: Rule[] = [
-  { id: 1, condition: "Credit Score < 600", action: "Reject", enabled: true, impact: 142, category: "Credit" },
-  { id: 2, condition: "DTI > 50%", action: "High Risk", enabled: true, impact: 98, category: "Debt" },
-  { id: 3, condition: "Income > ₹15,00,000/yr", action: "Low Risk", enabled: true, impact: 312, category: "Income" },
-  { id: 4, condition: "Loan > 5× Annual Income", action: "Reject", enabled: true, impact: 76, category: "Loan Ratio" },
-  { id: 5, condition: "Credit Score ≥ 750", action: "Low Risk", enabled: true, impact: 287, category: "Credit" },
-  { id: 6, condition: "DTI > 35%", action: "Medium Risk", enabled: true, impact: 134, category: "Debt" },
-  { id: 7, condition: "Late Payments > 2", action: "High Risk", enabled: false, impact: 54, category: "History" },
-  { id: 8, condition: "Credit Util > 50%", action: "Flag", enabled: true, impact: 61, category: "Credit" },
-  { id: 9, condition: "Income < ₹2,00,000/yr", action: "Reject", enabled: true, impact: 38, category: "Income" },
-  { id: 10, condition: "Employment < 1 year", action: "Medium Risk", enabled: false, impact: 29, category: "Employment" },
-];
-
-const AUDIT_LOGS: AuditLog[] = [
-  { id: 1, action: "Rule updated: DTI threshold changed from 50% to 45%", user: "Admin · Aryan J", time: "Today, 11:24 AM", type: "rule" },
-  { id: 2, action: "Application #FNT-4817 manually approved by admin", user: "Admin · Aryan J", time: "Today, 10:58 AM", type: "override" },
-  { id: 3, action: "New rule added: Employment < 1 year → Medium Risk", user: "Admin · Aryan J", time: "Today, 09:30 AM", type: "rule" },
-  { id: 4, action: "Application #FNT-4819 marked for review", user: "Analyst · Priya M", time: "Yesterday, 4:15 PM", type: "review" },
-  { id: 5, action: "System threshold updated: Min credit score changed to 600", user: "Admin · Aryan J", time: "Yesterday, 2:00 PM", type: "system" },
-  { id: 6, action: "Rule disabled: Late Payments > 2 → High Risk", user: "Analyst · Priya M", time: "Yesterday, 11:10 AM", type: "rule" },
-  { id: 7, action: "Application #FNT-4815 rejected manually — fraud suspicion", user: "Admin · Aryan J", time: "22 Mar, 3:42 PM", type: "override" },
-  { id: 8, action: "User role updated: Priya M promoted to Analyst", user: "Admin · Aryan J", time: "22 Mar, 10:00 AM", type: "system" },
-];
-
-const OVERRIDES: Override[] = [
-  { appId: "#FNT-4817", name: "Vikram Singh", systemDec: "Rejected", adminDec: "Approved", reason: "Additional income documents submitted and verified offline", admin: "Aryan J", date: "Today, 10:58 AM" },
-  { appId: "#FNT-4820", name: "Priya Sharma", systemDec: "Review", adminDec: "Review", reason: "Waiting for employer verification letter", admin: "Priya M", date: "Yesterday" },
-  { appId: "#FNT-4815", name: "Aditya Kumar", systemDec: "Rejected", adminDec: "Rejected", reason: "Confirmed fraud pattern — flagged for investigation", admin: "Aryan J", date: "22 Mar" },
-];
-
-const MONTHLY = [
+// ─── Fallback monthly shape (replaced by API) ────────────────────────────────
+const MONTHLY_FALLBACK = [
   { month: "Oct", approved: 34, rejected: 12, pending: 6 },
   { month: "Nov", approved: 41, rejected: 15, pending: 8 },
   { month: "Dec", approved: 28, rejected: 18, pending: 11 },
   { month: "Jan", approved: 52, rejected: 10, pending: 7 },
   { month: "Feb", approved: 47, rejected: 13, pending: 9 },
-  { month: "Mar", approved: 38, rejected: 9, pending: 5 },
+  { month: "Mar", approved: 38, rejected: 9,  pending: 5 },
 ];
 
 const DC: Record<string, string> = { Approved: "#00FFB3", Rejected: "#FF6B5B", Pending: "#FFB800", Review: "#00D4FF" };
@@ -114,11 +72,14 @@ function AnimBar({ pct, color, delay = 0 }: { pct: number; color: string; delay?
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminPanel() {
+  const router = useRouter();
   const [nav, setNav] = useState("dashboard");
   const [mouse, setMouse] = useState({ x: -100, y: -100 });
   const [sidebar, setSidebar] = useState(true);
-  const [rules, setRules] = useState<Rule[]>(RULES_INIT);
-  const [apps, setApps] = useState<Application[]>(APPS);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [apps, setApps] = useState<Application[]>([]);
+  const [monthly, setMonthly] = useState(MONTHLY_FALLBACK);
+  const [loading, setLoading] = useState(true);
   const [filterRisk, setFR] = useState("All");
   const [filterStatus, setFS] = useState("All");
   const [search, setSearch] = useState("");
@@ -128,27 +89,56 @@ export default function AdminPanel() {
   const [overrideApp, setOA] = useState<Application | null>(null);
   const [overrideReason, setOR] = useState("");
   const [overrideDec, setOD] = useState<Decision>("Approved");
-  const [overrides, setOverrides] = useState<Override[]>(OVERRIDES);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(AUDIT_LOGS);
+  const [overrides, setOverrides] = useState<Override[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [time, setTime] = useState(new Date());
   const [thresholds, setThresholds] = useState({ minCredit: 600, maxDTI: 50, maxLTI: 5, minIncome: 200000 });
-  const [barH, setBarH] = useState(MONTHLY.map(() => 0));
+  const [barH, setBarH] = useState(MONTHLY_FALLBACK.map(() => 0));
   const [showHighRiskPanel, setShowHighRiskPanel] = useState(false);
   const [viewApp, setViewApp] = useState<Application | null>(null);
 
-  useEffect(() => { window.addEventListener("mousemove", e => setMouse({ x: e.clientX, y: e.clientY })); }, []);
+  // ── Mouse & Clock ──────────────────────────────────────────────────────────
+  useEffect(() => { const h = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY }); window.addEventListener("mousemove", h); return () => window.removeEventListener("mousemove", h); }, []);
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
-  useEffect(() => { const t = setTimeout(() => setBarH(MONTHLY.map(m => m.approved + m.rejected + m.pending)), 400); return () => clearTimeout(t); }, []);
 
-  // Computed
+  // ── Initial Data Fetch ────────────────────────────────────────────────────
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [appsRes, rulesRes, logsRes, overridesRes, monthlyRes, configRes] = await Promise.all([
+        fetch("/api/applications?limit=50"),
+        fetch("/api/rules"),
+        fetch("/api/audit-logs?limit=50"),
+        fetch("/api/overrides"),
+        fetch("/api/analytics/monthly"),
+        fetch("/api/settings/thresholds"),
+      ]);
+      if (appsRes.status === 401) { router.push("/auth"); return; }
+      const [ad, rd, ld, od, md, cd] = await Promise.all([appsRes.json(), rulesRes.json(), logsRes.json(), overridesRes.json(), monthlyRes.json(), configRes.json()]);
+      if (ad.applications) setApps(ad.applications);
+      if (rd.rules) setRules(rd.rules);
+      if (ld.logs) setAuditLogs(ld.logs.map((l: {id:number;action:string;user:string;time:string;type:AuditLog["type"]}) => ({ id: l.id, action: l.action, user: l.user, time: l.time, type: l.type })));
+      if (od.overrides) setOverrides(od.overrides);
+      if (md.monthly) { setMonthly(md.monthly); setTimeout(() => setBarH(md.monthly.map((m: {approved:number;rejected:number;pending:number}) => m.approved + m.rejected + m.pending)), 400); }
+      if (cd.config) {
+        const c = cd.config;
+        setThresholds({ minCredit: Number(c.min_credit_score)||600, maxDTI: Number(c.max_dti)||50, maxLTI: Number(c.max_lti)||5, minIncome: Number(c.min_income)||200000 });
+      }
+    } catch { /* network error — keep UI usable */ }
+    finally { setLoading(false); }
+  }, [router]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // ── Computed ──────────────────────────────────────────────────────────────
   const total = apps.length;
   const approved = apps.filter(a => a.status === "Approved").length;
   const rejected = apps.filter(a => a.status === "Rejected").length;
   const pending = apps.filter(a => a.status === "Pending" || a.status === "Review").length;
-  const avgScore = Math.round(apps.reduce((s, a) => s + a.score, 0) / apps.length);
+  const avgScore = total ? Math.round(apps.reduce((s, a) => s + a.score, 0) / total) : 0;
   const highRisk = apps.filter(a => a.risk === "High").length;
-  const approvalRate = Math.round((approved / total) * 100);
-  const maxBar = Math.max(...MONTHLY.map(m => m.approved + m.rejected + m.pending));
+  const approvalRate = total ? Math.round((approved / total) * 100) : 0;
+  const maxBar = Math.max(...monthly.map(m => m.approved + m.rejected + m.pending), 1);
 
   const filtered = apps.filter(a => {
     const mS = filterStatus === "All" || a.status === filterStatus;
@@ -157,38 +147,68 @@ export default function AdminPanel() {
     return mS && mR && mQ;
   });
 
-  function addLog(action: string, type: AuditLog["type"]) {
-    setAuditLogs(prev => [{ id: Date.now(), action, user: "Admin · Aryan J", time: "Just now", type }, ...prev]);
-  }
-  function manualDecision(app: Application, dec: Decision) {
+  // ── Mutations (API-backed) ────────────────────────────────────────────────
+  async function manualDecision(app: Application, dec: Decision) {
     setApps(prev => prev.map(a => a.id === app.id ? { ...a, status: dec } : a));
-    addLog(`Application ${app.id} manually set to ${dec}`, "override");
+    await fetch(`/api/applications/${encodeURIComponent(app.id)}/decision`, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ decision: dec }) });
+    const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
+    if (ld.logs) setAuditLogs(ld.logs);
   }
-  function toggleRule(id: number) {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  async function toggleRule(id: number) {
     const r = rules.find(x => x.id === id);
-    if (r) addLog(`Rule "${r.condition}" ${r.enabled ? "disabled" : "enabled"}`, "rule");
+    if (!r) return;
+    const newEnabled = !r.enabled;
+    setRules(prev => prev.map(x => x.id === id ? { ...x, enabled: newEnabled } : x));
+    await fetch(`/api/rules/${id}`, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ enabled: newEnabled }) });
+    const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
+    if (ld.logs) setAuditLogs(ld.logs);
   }
-  function saveRule(r: Rule) {
+  async function saveRule(r: Rule) {
     setRules(prev => prev.map(x => x.id === r.id ? r : x));
-    addLog(`Rule updated: "${r.condition}" → ${r.action}`, "rule");
     setEditRule(null);
+    await fetch(`/api/rules/${r.id}`, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(r) });
+    const ld = await fetch("/api/audit-logs?limit=50").then(res => res.json());
+    if (ld.logs) setAuditLogs(ld.logs);
   }
-  function addRule() {
+  async function addRule() {
     if (!newRule.condition) return;
-    const r: Rule = { id: Date.now(), condition: newRule.condition, action: newRule.action, enabled: true, impact: 0, category: newRule.category };
-    setRules(prev => [...prev, r]);
-    addLog(`New rule added: "${newRule.condition}" → ${newRule.action}`, "rule");
+    const res = await fetch("/api/rules", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(newRule) });
+    const data = await res.json();
+    if (data.rule) setRules(prev => [...prev, data.rule]);
     setNewRule({ condition: "", action: "Reject", category: "Credit" });
     setShowAddRule(false);
+    const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
+    if (ld.logs) setAuditLogs(ld.logs);
   }
-  function submitOverride() {
+  async function submitOverride() {
     if (!overrideApp || !overrideReason) return;
-    setOverrides(prev => [{ appId: overrideApp.id, name: overrideApp.name, systemDec: overrideApp.status, adminDec: overrideDec, reason: overrideReason, admin: "Aryan J", date: "Just now" }, ...prev]);
-    manualDecision(overrideApp, overrideDec);
-    addLog(`Override: ${overrideApp.id} → ${overrideDec}. Reason: ${overrideReason}`, "override");
+    const app = overrideApp;
+    await fetch("/api/overrides", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ appId: app.id, name: app.name, systemDec: app.status, adminDec: overrideDec, reason: overrideReason }) });
+    setApps(prev => prev.map(a => a.id === app.id ? { ...a, status: overrideDec } : a));
+    const [od, ld] = await Promise.all([fetch("/api/overrides").then(r=>r.json()), fetch("/api/audit-logs?limit=50").then(r=>r.json())]);
+    if (od.overrides) setOverrides(od.overrides);
+    if (ld.logs) setAuditLogs(ld.logs);
     setOA(null); setOR(""); setOD("Approved");
   }
+  async function saveThresholds() {
+    await fetch("/api/settings/thresholds", { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ min_credit_score: String(thresholds.minCredit), max_dti: String(thresholds.maxDTI), max_lti: String(thresholds.maxLTI), min_income: String(thresholds.minIncome) }) });
+    const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
+    if (ld.logs) setAuditLogs(ld.logs);
+  }
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/auth");
+  }
+
+  if (loading) return (
+    <div style={{ fontFamily:"'Outfit',sans-serif", background:"#050508", color:"#F0EEFF", minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ width:48, height:48, borderRadius:"50%", border:"3px solid rgba(255,107,255,0.2)", borderTopColor:"#FF6BFF", animation:"spin 0.8s linear infinite", margin:"0 auto 16px" }} />
+        <div style={{ fontSize:14, color:"rgba(240,238,255,0.4)", fontWeight:700 }}>Loading Finntel...</div>
+      </div>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "'Outfit',sans-serif", background: "#050508", color: "#F0EEFF", minHeight: "100vh", display: "flex", cursor: "none", overflowX: "hidden" }}>
@@ -286,7 +306,15 @@ export default function AdminPanel() {
         <div style={{ padding: "10px 8px 18px", borderTop: "1px solid rgba(255,255,255,.05)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 10, background: "rgba(255,107,255,.05)", border: "1px solid rgba(255,107,255,.1)" }}>
             <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#FF6BFF,#A855F7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>AJ</div>
-            {sidebar && <div><div style={{ fontSize: 12, fontWeight: 800 }}>Aryan Joshi</div><div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)" }}>Super Admin</div></div>}
+            {sidebar && <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 800 }}>Aryan Joshi</div><div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)" }}>Super Admin</div></div>}
+            {sidebar && (
+              <button onClick={handleLogout} title="Sign out"
+                style={{ background: "none", border: "1px solid rgba(255,107,91,0.3)", borderRadius: 7, padding: "4px 7px", cursor: "none", color: "rgba(255,107,91,0.7)", fontSize: 11, fontWeight: 700, transition: "all 0.2s" }}
+                onMouseEnter={e => { e.currentTarget.style.color = "#FF6B5B"; e.currentTarget.style.borderColor = "#FF6B5B"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,107,91,0.7)"; e.currentTarget.style.borderColor = "rgba(255,107,91,0.3)"; }}>
+                ⏻
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -384,7 +412,7 @@ export default function AdminPanel() {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 9, alignItems: "flex-end", height: 120 }}>
-                    {MONTHLY.map((m, i) => {
+                    {monthly.map((m, i) => {
                       const total = m.approved + m.rejected + m.pending;
                       const h = barH[i] ? (total / maxBar) * 110 : 0;
                       return (
@@ -750,7 +778,7 @@ export default function AdminPanel() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 9, alignItems: "flex-end", height: 140 }}>
-                  {MONTHLY.map((m, i) => {
+                  {monthly.map((m, i) => {
                     const total = m.approved + m.rejected + m.pending;
                     const h = barH[i] ? (total / maxBar) * 130 : 0;
                     return (
@@ -948,7 +976,7 @@ export default function AdminPanel() {
                     </div>
                   ))}
                   <button className="btn btn-primary" style={{ justifyContent: "center", padding: "11px" }}
-                    onClick={() => addLog("System thresholds updated by admin", "system")}>
+                    onClick={() => saveThresholds()}>
                     Save Thresholds
                   </button>
                 </div>
