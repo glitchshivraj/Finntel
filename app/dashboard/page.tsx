@@ -489,7 +489,7 @@ export default function AdminPanel() {
                         <td className="td"><StatusBadge s={a.status} /></td>
                         <td className="td">
                           <div style={{ display: "flex", gap: 4 }}>
-                            <button className="btn btn-ghost" style={{ fontSize: 10, padding: "5px 8px" }} onClick={() => setViewApp(a)}>👁 View</button>
+                            <button className="btn btn-ghost" style={{ fontSize: 10, padding: "5px 8px" }} onClick={() => router.push(`/dashboard/applications/${encodeURIComponent(a.id)}`)}>👁 View</button>
                             <button className="btn btn-success" style={{ fontSize: 10, padding: "5px 8px" }} onClick={() => manualDecision(a, "Approved")}>✓</button>
                             <button className="btn btn-danger" style={{ fontSize: 10, padding: "5px 8px" }} onClick={() => manualDecision(a, "Rejected")}>✕</button>
                             <button className="btn btn-warn" style={{ fontSize: 10, padding: "5px 8px" }} onClick={() => manualDecision(a, "Review")}>⚑</button>
@@ -584,7 +584,7 @@ export default function AdminPanel() {
                         <td className="td" style={{ color: "rgba(240,238,255,.4)", fontSize: 12 }}>{a.date}</td>
                         <td className="td">
                           <div style={{ display: "flex", gap: 5 }}>
-                            <button className="btn btn-ghost" style={{ fontSize: 10, padding: "5px 9px" }} onClick={() => setViewApp(a)}>👁 View</button>
+                            <button className="btn btn-ghost" style={{ fontSize: 10, padding: "5px 9px" }} onClick={() => router.push(`/dashboard/applications/${encodeURIComponent(a.id)}`)}>👁 View</button>
                             <button className="btn btn-success" onClick={() => manualDecision(a, "Approved")}>✓</button>
                             <button className="btn btn-danger" onClick={() => manualDecision(a, "Rejected")}>✕</button>
                             <button className="btn btn-warn" onClick={() => manualDecision(a, "Review")}>⚑</button>

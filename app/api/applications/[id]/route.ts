@@ -9,7 +9,8 @@ export async function GET(
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = decodeURIComponent(rawId);
   const app = await queryOne(
     `SELECT id, name, avatar, amount, score, risk, status, applied_date as date,
             dti, income, credit_score as "creditScore", loan_type as "loanType",

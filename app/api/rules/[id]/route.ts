@@ -9,7 +9,8 @@ export async function PATCH(
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = decodeURIComponent(rawId);
   const body = await req.json();
 
   const rule = await queryOne<{ id: number; condition: string; action: string; enabled: boolean; impact: number; category: string }>(
