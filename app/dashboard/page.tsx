@@ -96,6 +96,12 @@ export default function AdminPanel() {
   const [barH, setBarH] = useState(MONTHLY_FALLBACK.map(() => 0));
   const [showHighRiskPanel, setShowHighRiskPanel] = useState(false);
   const [viewApp, setViewApp] = useState<Application | null>(null);
+  const [users, setUsers] = useState<{ id: number; name: string; email: string; role: string; active: boolean }[]>([]);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ name: "", email: "", role: "analyst" });
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ tempPassword: string; name: string } | null>(null);
+  const [inviteError, setInviteError] = useState("");
 
   // ── Mouse & Clock ──────────────────────────────────────────────────────────
   useEffect(() => { const h = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY }); window.addEventListener("mousemove", h); return () => window.removeEventListener("mousemove", h); }, []);
@@ -105,16 +111,17 @@ export default function AdminPanel() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [appsRes, rulesRes, logsRes, overridesRes, monthlyRes, configRes] = await Promise.all([
+      const [appsRes, rulesRes, logsRes, overridesRes, monthlyRes, configRes, usersRes] = await Promise.all([
         fetch("/api/applications?limit=50"),
         fetch("/api/rules"),
         fetch("/api/audit-logs?limit=50"),
         fetch("/api/overrides"),
         fetch("/api/analytics/monthly"),
         fetch("/api/settings/thresholds"),
+        fetch("/api/users"),
       ]);
       if (appsRes.status === 401) { router.push("/auth"); return; }
-      const [ad, rd, ld, od, md, cd] = await Promise.all([appsRes.json(), rulesRes.json(), logsRes.json(), overridesRes.json(), monthlyRes.json(), configRes.json()]);
+      const [ad, rd, ld, od, md, cd, ud] = await Promise.all([appsRes.json(), rulesRes.json(), logsRes.json(), overridesRes.json(), monthlyRes.json(), configRes.json(), usersRes.json()]);
       if (ad.applications) setApps(ad.applications);
       if (rd.rules) setRules(rd.rules);
       if (ld.logs) setAuditLogs(ld.logs.map((l: {id:number;action:string;user:string;time:string;type:AuditLog["type"]}) => ({ id: l.id, action: l.action, user: l.user, time: l.time, type: l.type })));
@@ -124,6 +131,7 @@ export default function AdminPanel() {
         const c = cd.config;
         setThresholds({ minCredit: Number(c.min_credit_score)||600, maxDTI: Number(c.max_dti)||50, maxLTI: Number(c.max_lti)||5, minIncome: Number(c.min_income)||200000 });
       }
+      if (ud.users) setUsers(ud.users);
     } catch { /* network error — keep UI usable */ }
     finally { setLoading(false); }
   }, [router]);
@@ -195,9 +203,37 @@ export default function AdminPanel() {
     const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
     if (ld.logs) setAuditLogs(ld.logs);
   }
+  async function deleteRule(id: number) {
+    if (!confirm("Delete this rule permanently?")) return;
+    setRules(prev => prev.filter(r => r.id !== id));
+    await fetch(`/api/rules/${id}`, { method: "DELETE" });
+    const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
+    if (ld.logs) setAuditLogs(ld.logs);
+  }
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/auth");
+  }
+  async function inviteUser() {
+    if (!inviteForm.name || !inviteForm.email) return;
+    setInviteLoading(true); setInviteError("");
+    try {
+      const res = await fetch("/api/users", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(inviteForm) });
+      const data = await res.json();
+      if (!res.ok) { setInviteError(data.error || "Failed to invite user"); return; }
+      setUsers(prev => [...prev, { id: data.id, name: data.name, email: data.email, role: data.role, active: true }]);
+      setInviteResult({ tempPassword: data.tempPassword, name: data.name });
+      setInviteForm({ name: "", email: "", role: "analyst" });
+      const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
+      if (ld.logs) setAuditLogs(ld.logs);
+    } finally { setInviteLoading(false); }
+  }
+  async function removeUser(id: number) {
+    if (!confirm("Remove this user permanently?")) return;
+    setUsers(prev => prev.filter(u => u.id !== id));
+    await fetch(`/api/users/${id}`, { method: "DELETE" });
+    const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
+    if (ld.logs) setAuditLogs(ld.logs);
   }
 
   if (loading) return (
@@ -245,10 +281,14 @@ export default function AdminPanel() {
         .btn-success:hover{background:rgba(0,255,179,.14)}
         .btn-warn{background:rgba(255,184,0,.08);border:1px solid rgba(255,184,0,.25) !important;color:#FFB800}
         .btn-warn:hover{background:rgba(255,184,0,.14)}
-        .input{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 14px;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;outline:none;transition:all .3s;cursor:none;width:100%}
+        .input{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 14px;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;outline:none;transition:all .3s;cursor:none;width:100%;color-scheme:dark}
         .input::placeholder{color:rgba(240,238,255,.25)}
         .input:focus{border-color:rgba(255,107,255,.45);background:rgba(255,107,255,.04);box-shadow:0 0 0 3px rgba(255,107,255,.08)}
-        .select{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 14px;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;outline:none;cursor:none;transition:all .3s}
+        select.input{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(240,238,255,0.4)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+        select.input option{background:#0E0C1A;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;padding:8px 12px}
+        select.input option:checked{background:rgba(255,107,255,.25);color:#FF6BFF}
+        select.input option:hover{background:rgba(255,107,255,.15)}
+        .select{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 14px;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;outline:none;cursor:none;transition:all .3s;color-scheme:dark}
         .select:focus{border-color:rgba(255,107,255,.45)}
         .chip{display:inline-flex;align-items:center;gap:5px;border-radius:100px;padding:4px 11px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.08em;cursor:none}
         .toggle{width:36px;height:20px;border-radius:10px;position:relative;cursor:none;transition:background .3s;flex-shrink:0;border:none}
@@ -682,7 +722,14 @@ export default function AdminPanel() {
                           <div style={{ display: "flex", gap: 6 }}>
                             {editRule?.id === r.id
                               ? <><button className="btn btn-success" onClick={() => saveRule(editRule)}>Save</button><button className="btn btn-ghost" onClick={() => setEditRule(null)}>Cancel</button></>
-                              : <button className="btn btn-ghost" onClick={() => setEditRule(r)}>Edit</button>
+                              : <>
+                                  <button className="btn btn-ghost" onClick={() => setEditRule(r)}>Edit</button>
+                                  <button
+                                    className="btn btn-danger"
+                                    style={{ fontSize: 10, padding: "5px 10px" }}
+                                    onClick={() => deleteRule(r.id)}
+                                  >Delete</button>
+                                </>
                             }
                           </div>
                         </td>
@@ -982,30 +1029,78 @@ export default function AdminPanel() {
                 </div>
               </div>
 
-              {/* User roles */}
+              {/* User Management */}
               <div className="card fu d2" style={{ padding: "24px" }}>
-                <div className="section-lbl" style={{ color: "#00D4FF" }}>User Management</div>
-                {[
-                  { name: "Aryan Joshi", role: "Super Admin", email: "aryan@finntel.ai", active: true },
-                  { name: "Priya Menon", role: "Analyst", email: "priya@finntel.ai", active: true },
-                  { name: "Rahul Desai", role: "Analyst", email: "rahul@finntel.ai", active: false },
-                  { name: "Nisha Kapoor", role: "Viewer", email: "nisha@finntel.ai", active: true },
-                ].map((u, i) => (
-                  <div key={i} className="row" style={{ marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,rgba(255,107,255,.3),rgba(0,212,255,.2))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>{u.name.split(" ").map(w => w[0]).join("")}</div>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 800 }}>{u.name}</div>
-                        <div style={{ fontSize: 11, color: "rgba(240,238,255,.38)" }}>{u.email}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <div className="section-lbl" style={{ color: "#00D4FF", marginBottom: 0 }}>User Management <span className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.3)" }}>({users.length} USERS)</span></div>
+                  <button className="btn btn-primary" style={{ fontSize: 11, padding: "7px 14px" }} onClick={() => { setShowInvite(true); setInviteResult(null); setInviteError(""); }}>+ Invite User</button>
+                </div>
+
+                {/* Invite Form */}
+                {showInvite && (
+                  <div style={{ marginBottom: 16, padding: "16px 18px", background: "rgba(255,107,255,.04)", border: "1px solid rgba(255,107,255,.2)", borderRadius: 12 }}>
+                    {inviteResult ? (
+                      <div style={{ textAlign: "center", padding: "8px 0" }}>
+                        <div style={{ fontSize: 24, marginBottom: 8 }}>🎉</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: "#00FFB3", marginBottom: 4 }}>{inviteResult.name} invited!</div>
+                        <div style={{ fontSize: 12, color: "rgba(240,238,255,.5)", marginBottom: 12 }}>Share this temporary password with them:</div>
+                        <div style={{ display: "inline-block", padding: "8px 20px", background: "rgba(0,255,179,.08)", border: "1px solid rgba(0,255,179,.3)", borderRadius: 8, fontFamily: "'Space Mono',monospace", fontSize: 15, fontWeight: 700, color: "#00FFB3", letterSpacing: ".08em", marginBottom: 14 }}>{inviteResult.tempPassword}</div>
+                        <div><button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setInviteResult(null); setShowInvite(false); }}>Done</button></div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 14 }}>Invite New User</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "flex-end" }}>
+                          <div>
+                            <label style={{ fontSize: 10, fontWeight: 700, color: "rgba(240,238,255,.4)", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Full Name</label>
+                            <input className="input" placeholder="e.g. Rohan Verma" value={inviteForm.name} onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, fontWeight: 700, color: "rgba(240,238,255,.4)", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Email</label>
+                            <input className="input" type="email" placeholder="rohan@finntel.ai" value={inviteForm.email} onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, fontWeight: 700, color: "rgba(240,238,255,.4)", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Role</label>
+                            <select className="input" value={inviteForm.role} onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}>
+                              <option value="analyst">Analyst</option>
+                              <option value="super_admin">Super Admin</option>
+                              <option value="viewer">Viewer</option>
+                            </select>
+                          </div>
+                        </div>
+                        {inviteError && <div style={{ marginTop: 10, fontSize: 12, color: "#FF6B5B", fontWeight: 700 }}>⚠ {inviteError}</div>}
+                        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                          <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={inviteUser} disabled={inviteLoading}>{inviteLoading ? "Inviting…" : "Send Invite"}</button>
+                          <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowInvite(false); setInviteError(""); }}>Cancel</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Live User List */}
+                {users.map(u => {
+                  const roleColor = u.role === "super_admin" ? "#FF6BFF" : u.role === "analyst" ? "#00D4FF" : "#A855F7";
+                  const roleLabel = u.role === "super_admin" ? "Super Admin" : u.role === "analyst" ? "Analyst" : "Viewer";
+                  return (
+                    <div key={u.id} className="row" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,rgba(255,107,255,.3),rgba(0,212,255,.2))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>
+                          {u.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 800 }}>{u.name}</div>
+                          <div style={{ fontSize: 11, color: "rgba(240,238,255,.38)" }}>{u.email}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: roleColor, background: `${roleColor}18`, padding: "3px 10px", borderRadius: 6 }}>{roleLabel}</span>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: u.active ? "#00FFB3" : "rgba(255,255,255,.2)", boxShadow: u.active ? "0 0 8px #00FFB380" : "none" }} />
+                        <button className="btn btn-danger" style={{ fontSize: 9, padding: "3px 8px" }} onClick={() => removeUser(u.id)}>Remove</button>
                       </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: u.role === "Super Admin" ? "#FF6BFF" : u.role === "Analyst" ? "#00D4FF" : "#A855F7", background: `${u.role === "Super Admin" ? "rgba(255,107,255" : u.role === "Analyst" ? "rgba(0,212,255" : "rgba(168,85,247"},.1)`, padding: "3px 10px", borderRadius: 6 }}>{u.role}</span>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: u.active ? "#00FFB3" : "rgba(255,255,255,.2)", boxShadow: u.active ? "0 0 8px #00FFB380" : "none" }} />
-                    </div>
-                  </div>
-                ))}
-                <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}>+ Invite User</button>
+                  );
+                })}
               </div>
 
               {/* System config */}
