@@ -10,7 +10,14 @@ function createPool(): Pool {
   if (!connectionString) {
     throw new Error("DATABASE_URL environment variable is not set");
   }
-  return new Pool({ connectionString, max: 10 });
+  return new Pool({
+    connectionString,
+    max: 20,
+    ssl: connectionString.includes("supabase.co")
+      ? { rejectUnauthorized: false }
+      : undefined,
+  });
+
 }
 
 // Reuse pool in development to avoid exhausting connections on hot reload

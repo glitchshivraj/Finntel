@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 const stats = [
   { value: "98.4%", label: "Approval Accuracy" },
@@ -47,6 +48,7 @@ const steps = [
 ];
 
 export default function FinntelLanding() {
+  const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [mousePos, setMousePos] = useState({ x: -100, y: -100 });
@@ -330,8 +332,8 @@ export default function FinntelLanding() {
           </div>
 
           <div style={{ display: "flex", gap: 12 }}>
-            <button className="outline-btn" style={{ padding: "9px 22px", fontSize: 13 }}>Log in</button>
-            <button className="cta-btn" style={{ padding: "9px 22px", fontSize: 13 }}>Get started →</button>
+            <button className="outline-btn" style={{ padding: "9px 22px", fontSize: 13 }} onClick={() => router.push("/auth")}>Log in</button>
+            <button className="cta-btn" style={{ padding: "9px 22px", fontSize: 13 }} onClick={() => router.push("/auth")}>Get started →</button>
           </div>
         </div>
       </nav>
@@ -374,8 +376,8 @@ export default function FinntelLanding() {
               </p>
 
               <div className="fade-up d4" style={{ display: "flex", gap: 14 }}>
-                <button className="cta-btn" style={{ fontSize: 15, padding: "15px 38px" }}>Start Free Trial</button>
-                <button className="outline-btn" style={{ fontSize: 15, padding: "15px 38px" }}>View API Docs</button>
+                <button className="cta-btn" style={{ fontSize: 15, padding: "15px 38px" }} onClick={() => router.push("/auth")}>Start Free Trial</button>
+                <button className="outline-btn" style={{ fontSize: 15, padding: "15px 38px" }} onClick={() => { const el = document.getElementById("features-section"); if (el) el.scrollIntoView({ behavior: "smooth" }); }}>View Features</button>
               </div>
 
               {/* Stats */}
@@ -513,7 +515,7 @@ export default function FinntelLanding() {
       </div>
 
       {/* FEATURES */}
-      <section style={{ padding: "130px 48px", maxWidth: 1280, margin: "0 auto" }}>
+      <section id="features-section" style={{ padding: "130px 48px", maxWidth: 1280, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 80 }}>
           <div style={{ marginBottom: 20 }}><span className="section-tag">What we do</span></div>
           <h2 style={{ fontSize: "clamp(36px, 4vw, 56px)", fontWeight: 900, letterSpacing: "-0.04em", lineHeight: 1.05 }}>
@@ -676,8 +678,8 @@ export default function FinntelLanding() {
                 Integrate Finntel into your lending pipeline in under a day. Full API documentation, sandbox environment, and dedicated support included.
               </p>
               <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-                <button className="cta-btn" style={{ fontSize: 16, padding: "17px 48px" }}>Start for free →</button>
-                <button className="outline-btn" style={{ fontSize: 16, padding: "17px 48px" }}>Schedule a demo</button>
+                <button className="cta-btn" style={{ fontSize: 16, padding: "17px 48px" }} onClick={() => router.push("/auth")}>Start for free →</button>
+                <button className="outline-btn" style={{ fontSize: 16, padding: "17px 48px" }} onClick={() => router.push("/auth")}>Schedule a demo</button>
               </div>
             </div>
           </div>
