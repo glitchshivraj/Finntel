@@ -102,10 +102,6 @@ export default function AdminPanel() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ tempPassword: string; name: string } | null>(null);
   const [inviteError, setInviteError] = useState("");
-  const [currentUser, setCurrentUser] = useState<{ id: number; name: string; email: string; role: string } | null>(null);
-  const [riskDist, setRiskDist] = useState<{ label: string; count: number; pct: number; color: string }[]>([]);
-  const [incomeBands, setIncomeBands] = useState<{ band: string; rate: number; count: number; color: string }[]>([]);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   // ── Mouse & Clock ──────────────────────────────────────────────────────────
   useEffect(() => { const h = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY }); window.addEventListener("mousemove", h); return () => window.removeEventListener("mousemove", h); }, []);
@@ -115,7 +111,7 @@ export default function AdminPanel() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [appsRes, rulesRes, logsRes, overridesRes, monthlyRes, configRes, usersRes, meRes, rdRes, ibRes] = await Promise.all([
+      const [appsRes, rulesRes, logsRes, overridesRes, monthlyRes, configRes, usersRes] = await Promise.all([
         fetch("/api/applications?limit=50"),
         fetch("/api/rules"),
         fetch("/api/audit-logs?limit=50"),
@@ -123,12 +119,9 @@ export default function AdminPanel() {
         fetch("/api/analytics/monthly"),
         fetch("/api/settings/thresholds"),
         fetch("/api/users"),
-        fetch("/api/auth/me"),
-        fetch("/api/analytics/risk-distribution"),
-        fetch("/api/analytics/income-bands"),
       ]);
       if (appsRes.status === 401) { router.push("/auth"); return; }
-      const [ad, rd, ld, od, md, cd, ud, me, rdData, ibData] = await Promise.all([appsRes.json(), rulesRes.json(), logsRes.json(), overridesRes.json(), monthlyRes.json(), configRes.json(), usersRes.json(), meRes.json(), rdRes.json(), ibRes.json()]);
+      const [ad, rd, ld, od, md, cd, ud] = await Promise.all([appsRes.json(), rulesRes.json(), logsRes.json(), overridesRes.json(), monthlyRes.json(), configRes.json(), usersRes.json()]);
       if (ad.applications) setApps(ad.applications);
       if (rd.rules) setRules(rd.rules);
       if (ld.logs) setAuditLogs(ld.logs.map((l: {id:number;action:string;user:string;time:string;type:AuditLog["type"]}) => ({ id: l.id, action: l.action, user: l.user, time: l.time, type: l.type })));
@@ -139,9 +132,6 @@ export default function AdminPanel() {
         setThresholds({ minCredit: Number(c.min_credit_score)||600, maxDTI: Number(c.max_dti)||50, maxLTI: Number(c.max_lti)||5, minIncome: Number(c.min_income)||200000 });
       }
       if (ud.users) setUsers(ud.users);
-      if (me.user) setCurrentUser(me.user);
-      if (rdData.distribution) setRiskDist(rdData.distribution);
-      if (ibData.bands) setIncomeBands(ibData.bands);
     } catch { /* network error — keep UI usable */ }
     finally { setLoading(false); }
   }, [router]);
@@ -353,88 +343,20 @@ export default function AdminPanel() {
           ))}
         </nav>
         {/* User */}
-        <div style={{ padding: "10px 8px 18px", borderTop: "1px solid rgba(255,255,255,.05)", position: "relative" }}>
-
-          {/* Profile Popover */}
-          {showProfileMenu && (
-            <>
-              {/* Click-outside overlay */}
-              <div style={{ position: "fixed", inset: 0, zIndex: 98 }} onClick={() => setShowProfileMenu(false)} />
-              <div style={{
-                position: "absolute", bottom: "calc(100% + 8px)", left: 8, right: 8,
-                background: "rgba(12,10,20,.97)", border: "1px solid rgba(255,107,255,.2)",
-                borderRadius: 14, padding: "16px", zIndex: 99,
-                boxShadow: "0 -8px 32px rgba(255,107,255,.12), 0 0 0 1px rgba(255,255,255,.04)",
-                backdropFilter: "blur(20px)",
-                animation: "fadeUp .2s cubic-bezier(.16,1,.3,1)",
-              }}>
-                {/* Avatar + name */}
-                <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: "50%", background: "linear-gradient(135deg,#FF6BFF,#A855F7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 900, flexShrink: 0, boxShadow: "0 0 16px rgba(255,107,255,.4)" }}>
-                    {currentUser ? currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() : "??"}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser?.name}</div>
-                    <div style={{ fontSize: 11, color: "rgba(240,238,255,.45)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser?.email}</div>
-                  </div>
-                </div>
-
-                {/* Role badge */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "8px 12px", background: "rgba(255,107,255,.06)", border: "1px solid rgba(255,107,255,.15)", borderRadius: 9 }}>
-                  <span style={{ fontSize: 13 }}>{currentUser?.role === "super_admin" ? "👑" : "📊"}</span>
-                  <div>
-                    <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.35)", letterSpacing: ".1em", textTransform: "uppercase" }}>Role</div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#FF6BFF" }}>
-                      {currentUser?.role === "super_admin" ? "Super Admin" : currentUser?.role === "analyst" ? "Analyst" : currentUser?.role}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <button
-                    onClick={() => { setShowProfileMenu(false); setNav("settings"); }}
-                    style={{ width: "100%", padding: "9px 12px", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 9, color: "rgba(240,238,255,.75)", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 700, cursor: "none", textAlign: "left", transition: "all .2s", display: "flex", alignItems: "center", gap: 8 }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,107,255,.08)"; e.currentTarget.style.borderColor = "rgba(255,107,255,.2)"; e.currentTarget.style.color = "#FF6BFF"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,.07)"; e.currentTarget.style.color = "rgba(240,238,255,.75)"; }}
-                  >
-                    <span>⚙️</span> Account Settings
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    style={{ width: "100%", padding: "9px 12px", background: "rgba(255,107,91,.06)", border: "1px solid rgba(255,107,91,.2)", borderRadius: 9, color: "#FF6B5B", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 700, cursor: "none", textAlign: "left", transition: "all .2s", display: "flex", alignItems: "center", gap: 8 }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,107,91,.14)"; e.currentTarget.style.borderColor = "#FF6B5B"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,107,91,.06)"; e.currentTarget.style.borderColor = "rgba(255,107,91,.2)"; }}
-                  >
-                    <span>🚪</span> Sign out
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Clickable user card */}
-          <div
-            onClick={() => setShowProfileMenu(p => !p)}
-            style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 10, background: showProfileMenu ? "rgba(255,107,255,.1)" : "rgba(255,107,255,.05)", border: `1px solid ${showProfileMenu ? "rgba(255,107,255,.3)" : "rgba(255,107,255,.1)"}`, cursor: "none", transition: "all .2s", userSelect: "none" }}
-            onMouseEnter={e => { if (!showProfileMenu) { e.currentTarget.style.background = "rgba(255,107,255,.1)"; e.currentTarget.style.borderColor = "rgba(255,107,255,.25)"; } }}
-            onMouseLeave={e => { if (!showProfileMenu) { e.currentTarget.style.background = "rgba(255,107,255,.05)"; e.currentTarget.style.borderColor = "rgba(255,107,255,.1)"; } }}
-          >
-            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#FF6BFF,#A855F7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
-              {currentUser ? currentUser.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() : "??"}
-            </div>
-            {sidebar && <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser?.name || "Loading…"}</div>
-              <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)", textTransform: "capitalize" }}>
-                {currentUser?.role === "super_admin" ? "Super Admin" : currentUser?.role === "analyst" ? "Analyst" : currentUser?.role || "…"}
-              </div>
-            </div>}
+        <div style={{ padding: "10px 8px 18px", borderTop: "1px solid rgba(255,255,255,.05)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 10, background: "rgba(255,107,255,.05)", border: "1px solid rgba(255,107,255,.1)" }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#FF6BFF,#A855F7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>AJ</div>
+            {sidebar && <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 800 }}>Aryan Joshi</div><div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)" }}>Super Admin</div></div>}
             {sidebar && (
-              <span style={{ fontSize: 10, color: "rgba(240,238,255,.3)", transition: "transform .2s", transform: showProfileMenu ? "rotate(180deg)" : "rotate(0deg)", display: "inline-block", flexShrink: 0 }}>▲</span>
+              <button onClick={handleLogout} title="Sign out"
+                style={{ background: "none", border: "1px solid rgba(255,107,91,0.3)", borderRadius: 7, padding: "4px 7px", cursor: "none", color: "rgba(255,107,91,0.7)", fontSize: 11, fontWeight: 700, transition: "all 0.2s" }}
+                onMouseEnter={e => { e.currentTarget.style.color = "#FF6B5B"; e.currentTarget.style.borderColor = "#FF6B5B"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,107,91,0.7)"; e.currentTarget.style.borderColor = "rgba(255,107,91,0.3)"; }}>
+                ⏻
+              </button>
             )}
           </div>
         </div>
-
       </aside>
 
       {/* ── MAIN ── */}
@@ -496,29 +418,19 @@ export default function AdminPanel() {
 
               {/* Alerts & Warnings */}
               <div className="fu d1" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
-                {(() => {
-                  const highRiskApproved = apps.filter(a => a.risk === "High" && a.status === "Approved").length;
-                  const rejectionRate = total > 0 ? Math.round((rejected / total) * 100) : 0;
-                  const activeRules = rules.filter(r => r.enabled).length;
-                  const alerts = [
-                    highRiskApproved > 0
-                      ? { icon: "🚨", title: `${highRiskApproved} high-risk approval${highRiskApproved > 1 ? "s" : ""} detected`, detail: `${highRiskApproved} high-risk application${highRiskApproved > 1 ? "s" : ""} approved — review manual overrides immediately.`, level: "red" }
-                      : { icon: "✅", title: "No high-risk approvals", detail: "No high-risk applications have been approved. Portfolio is clean.", level: "green" },
-                    rejectionRate > 30
-                      ? { icon: "📉", title: `High rejection rate: ${rejectionRate}%`, detail: `${rejectionRate}% of applications are being rejected — consider reviewing DTI and credit score thresholds.`, level: "red" }
-                      : { icon: "📊", title: `Rejection rate: ${rejectionRate}%`, detail: `${rejectionRate}% rejection rate is within acceptable range. Approval pipeline is healthy.`, level: "yellow" },
-                    { icon: "⚙️", title: `${activeRules} active rules in engine`, detail: `${activeRules} rules are currently active. ${rules.length - activeRules} rule${rules.length - activeRules !== 1 ? "s" : ""} disabled. Review rule conflicts regularly.`, level: "yellow" },
-                  ];
-                  return alerts.map((a, i) => (
-                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 14px", background: a.level === "red" ? "rgba(255,107,91,.05)" : a.level === "green" ? "rgba(0,255,179,.04)" : "rgba(255,184,0,.04)", border: `1px solid ${a.level === "red" ? "rgba(255,107,91,.2)" : a.level === "green" ? "rgba(0,255,179,.18)" : "rgba(255,184,0,.16)"}`, borderRadius: 11, borderLeft: `3px solid ${a.level === "red" ? "#FF6B5B" : a.level === "green" ? "#00FFB3" : "#FFB800"}` }}>
-                      <span style={{ fontSize: 15, flexShrink: 0 }}>{a.icon}</span>
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: a.level === "red" ? "#FF6B5B" : a.level === "green" ? "#00FFB3" : "#FFB800", marginBottom: 3 }}>{a.title}</div>
-                        <div style={{ fontSize: 10, color: "rgba(240,238,255,.45)", lineHeight: 1.55 }}>{a.detail}</div>
-                      </div>
+                {[
+                  { icon: "🚨", title: "High-risk approval detected", detail: "2 high-risk applications approved this week — review manual overrides.", level: "red" },
+                  { icon: "📉", title: "Rejection spike +15%", detail: "Rejections up 15% this month due to stricter DTI rules applied.", level: "red" },
+                  { icon: "⚠️", title: "Rule conflict detected", detail: "Rules #2 & #6 overlap on DTI thresholds — may cause inconsistent flags.", level: "yellow" },
+                ].map((a, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 14px", background: a.level === "red" ? "rgba(255,107,91,.05)" : "rgba(255,184,0,.04)", border: `1px solid ${a.level === "red" ? "rgba(255,107,91,.2)" : "rgba(255,184,0,.16)"}`, borderRadius: 11, borderLeft: `3px solid ${a.level === "red" ? "#FF6B5B" : "#FFB800"}` }}>
+                    <span style={{ fontSize: 15, flexShrink: 0 }}>{a.icon}</span>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: a.level === "red" ? "#FF6B5B" : "#FFB800", marginBottom: 3 }}>{a.title}</div>
+                      <div style={{ fontSize: 10, color: "rgba(240,238,255,.45)", lineHeight: 1.55 }}>{a.detail}</div>
                     </div>
-                  ));
-                })()}
+                  </div>
+                ))}
               </div>
 
               {/* Charts row */}
@@ -564,43 +476,30 @@ export default function AdminPanel() {
                 <div className="card fu d4" style={{ padding: "22px 20px" }}>
                   <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Risk Split</div>
                   <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)", letterSpacing: ".08em", marginBottom: 16 }}>CURRENT PORTFOLIO</div>
-                  {(() => {
-                    const C = 2 * Math.PI * 46; // circumference ≈ 289
-                    const lowPct  = riskDist.find(r => r.label === "Low Risk")?.pct    ?? (total > 0 ? Math.round((apps.filter(a => a.risk === "Low").length / total) * 100) : 62);
-                    const medPct  = riskDist.find(r => r.label === "Medium Risk")?.pct ?? (total > 0 ? Math.round((apps.filter(a => a.risk === "Medium").length / total) * 100) : 28);
-                    const highPct = riskDist.find(r => r.label === "High Risk")?.pct   ?? (total > 0 ? Math.round((apps.filter(a => a.risk === "High").length / total) * 100) : 10);
-                    const lowDash  = (lowPct  / 100) * C;
-                    const medDash  = (medPct  / 100) * C;
-                    const highDash = (highPct / 100) * C;
-                    return (
-                      <>
-                        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                          <div style={{ position: "relative", width: 120, height: 120 }}>
-                            <svg width="120" height="120" viewBox="0 0 120 120">
-                              <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(255,255,255,.05)" strokeWidth="14" />
-                              <circle cx="60" cy="60" r="46" fill="none" stroke="url(#dg1)" strokeWidth="14" strokeDasharray={`${lowDash} ${C - lowDash}`} strokeDashoffset="0" strokeLinecap="round" transform="rotate(-90 60 60)" />
-                              <circle cx="60" cy="60" r="46" fill="none" stroke="#FFB800" strokeWidth="14" strokeDasharray={`${medDash} ${C - medDash}`} strokeDashoffset={`${-lowDash}`} strokeLinecap="round" transform="rotate(-90 60 60)" />
-                              <circle cx="60" cy="60" r="46" fill="none" stroke="#FF6B5B" strokeWidth="14" strokeDasharray={`${highDash} ${C - highDash}`} strokeDashoffset={`${-(lowDash + medDash)}`} strokeLinecap="round" transform="rotate(-90 60 60)" />
-                              <defs><linearGradient id="dg1" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#00FFB3" /><stop offset="1" stopColor="#00D4FF" /></linearGradient></defs>
-                            </svg>
-                            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                              <div style={{ fontSize: 20, fontWeight: 900, color: "#00FFB3" }}>{lowPct}%</div>
-                              <div style={{ fontSize: 8, color: "rgba(240,238,255,.35)", fontWeight: 700 }}>Low Risk</div>
-                            </div>
-                          </div>
-                        </div>
-                        {[{ c: "#00FFB3", l: "Low", p: `${lowPct}%` }, { c: "#FFB800", l: "Medium", p: `${medPct}%` }, { c: "#FF6B5B", l: "High", p: `${highPct}%` }].map(x => (
-                          <div key={x.l} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}><div style={{ width: 7, height: 7, borderRadius: 2, background: x.c }} /><span style={{ fontSize: 12, fontWeight: 700, color: "rgba(240,238,255,.6)" }}>{x.l} Risk</span></div>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: x.c }}>{x.p}</span>
-                          </div>
-                        ))}
-                        <div style={{ marginTop: 10, padding: "8px 11px", background: "rgba(0,255,179,.04)", border: "1px solid rgba(0,255,179,.1)", borderRadius: 8, borderLeft: "3px solid #00FFB3" }}>
-                          <span style={{ fontSize: 10, color: "rgba(240,238,255,.45)" }}>💡 {lowPct >= 60 ? `${lowPct}% Low Risk signals a healthy portfolio — consider relaxing review thresholds.` : lowPct >= 40 ? `${lowPct}% Low Risk — monitor medium-risk applications closely.` : `Low Risk at ${lowPct}% — review rule engine configuration.`}</span>
-                        </div>
-                      </>
-                    );
-                  })()}
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+                    <div style={{ position: "relative", width: 120, height: 120 }}>
+                      <svg width="120" height="120" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(255,255,255,.05)" strokeWidth="14" />
+                        <circle cx="60" cy="60" r="46" fill="none" stroke="url(#dg1)" strokeWidth="14" strokeDasharray="289" strokeDashoffset="0" strokeLinecap="round" transform="rotate(-90 60 60)" />
+                        <circle cx="60" cy="60" r="46" fill="none" stroke="#FFB800" strokeWidth="14" strokeDasharray={`${.28 * 289} ${.72 * 289}`} strokeDashoffset={`${-.62 * 289}`} strokeLinecap="round" transform="rotate(-90 60 60)" />
+                        <circle cx="60" cy="60" r="46" fill="none" stroke="#FF6B5B" strokeWidth="14" strokeDasharray={`${.1 * 289} ${.9 * 289}`} strokeDashoffset={`${-.9 * 289}`} strokeLinecap="round" transform="rotate(-90 60 60)" />
+                        <defs><linearGradient id="dg1" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#00FFB3" /><stop offset="1" stopColor="#00D4FF" /></linearGradient></defs>
+                      </svg>
+                      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ fontSize: 20, fontWeight: 900, color: "#00FFB3" }}>62%</div>
+                        <div style={{ fontSize: 8, color: "rgba(240,238,255,.35)", fontWeight: 700 }}>Low Risk</div>
+                      </div>
+                    </div>
+                  </div>
+                  {[{ c: "#00FFB3", l: "Low", p: "62%" }, { c: "#FFB800", l: "Medium", p: "28%" }, { c: "#FF6B5B", l: "High", p: "10%" }].map(x => (
+                    <div key={x.l} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7 }}><div style={{ width: 7, height: 7, borderRadius: 2, background: x.c }} /><span style={{ fontSize: 12, fontWeight: 700, color: "rgba(240,238,255,.6)" }}>{x.l} Risk</span></div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: x.c }}>{x.p}</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 10, padding: "8px 11px", background: "rgba(0,255,179,.04)", border: "1px solid rgba(0,255,179,.1)", borderRadius: 8, borderLeft: "3px solid #00FFB3" }}>
+                    <span style={{ fontSize: 10, color: "rgba(240,238,255,.45)" }}>💡 62% Low Risk signals a healthy portfolio — consider relaxing the manual review queue threshold.</span>
+                  </div>
                 </div>
               </div>
 
@@ -857,38 +756,23 @@ export default function AdminPanel() {
               )}
 
               {/* Pattern alerts */}
-              {(() => {
-                const highDTI = apps.filter(a => a.dti > 50).length;
-                const avgCreditScore = apps.length > 0 ? Math.round(apps.reduce((s, a) => s + (a.creditScore || 0), 0) / apps.length) : 0;
-                const patterns = [
-                  approvalRate > 70
-                    ? { icon: "📈", title: `Approval rate high: ${approvalRate}%`, detail: `${approvalRate}% approval rate may indicate rules are too lenient. Review credit and DTI thresholds.`, level: "yellow" }
-                    : approvalRate < 30
-                    ? { icon: "📉", title: `Low approval rate: ${approvalRate}%`, detail: `Only ${approvalRate}% of applications approved. Rules may be overly strict — review rejection patterns.`, level: "red" }
-                    : { icon: "✅", title: `Healthy approval rate: ${approvalRate}%`, detail: `Approval rate is within normal range. Portfolio balance between growth and risk is maintained.`, level: "green" },
-                  highDTI > 0
-                    ? { icon: "💸", title: `${highDTI} high-DTI applicant${highDTI > 1 ? "s" : ""}`, detail: `${highDTI} application${highDTI > 1 ? "s" : ""} with DTI > 50% in current batch. Flag for manual review.`, level: "red" }
-                    : { icon: "💚", title: "No extreme DTI cases", detail: "No applicants with DTI above 50% in current batch. Debt exposure is manageable.", level: "green" },
-                  avgCreditScore > 0
-                    ? { icon: avgCreditScore >= 700 ? "📊" : "⚠️", title: `Avg credit score: ${avgCreditScore}`, detail: avgCreditScore >= 700 ? `Average credit score of ${avgCreditScore} indicates a relatively healthy applicant pool.` : `Average credit score of ${avgCreditScore} is below 700. Consider tightening minimum credit score rules.`, level: avgCreditScore >= 700 ? "yellow" : "red" }
-                    : { icon: "❓", title: "Credit score data missing", detail: "Credit score data not available for current batch.", level: "yellow" },
-                ];
-                return (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-                    {patterns.map((a, i) => (
-                      <div key={i} className={`card fu d${i + 1}`} style={{ padding: "16px 18px", border: `1px solid ${a.level === "red" ? "rgba(255,107,91,.25)" : a.level === "green" ? "rgba(0,255,179,.2)" : "rgba(255,184,0,.2)"}`, background: `${a.level === "red" ? "rgba(255,107,91," : a.level === "green" ? "rgba(0,255,179," : "rgba(255,184,0,"}0.05)` }}>
-                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                          <span style={{ fontSize: 20, flexShrink: 0 }}>{a.icon}</span>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: a.level === "red" ? "#FF6B5B" : a.level === "green" ? "#00FFB3" : "#FFB800", marginBottom: 5 }}>{a.title}</div>
-                            <div style={{ fontSize: 12, color: "rgba(240,238,255,.5)", lineHeight: 1.6 }}>{a.detail}</div>
-                          </div>
-                        </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+                {[
+                  { icon: "📈", title: "Approval spike detected", detail: "23% more approvals than last week — possible rule misconfiguration", level: "yellow" },
+                  { icon: "💸", title: "High-debt cluster", detail: "3 applicants with DTI > 70% submitted in last 48 hours", level: "red" },
+                  { icon: "📉", title: "Credit score distribution", detail: "Average credit score dropped to 698 this month (-14 pts)", level: "yellow" },
+                ].map((a, i) => (
+                  <div key={i} className={`card fu d${i + 1}`} style={{ padding: "16px 18px", border: `1px solid ${a.level === "red" ? "rgba(255,107,91,.25)" : "rgba(255,184,0,.2)"}`, background: `${a.level === "red" ? "rgba(255,107,91," : "rgba(255,184,0,"}0.05)` }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <span style={{ fontSize: 20, flexShrink: 0 }}>{a.icon}</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: a.level === "red" ? "#FF6B5B" : "#FFB800", marginBottom: 5 }}>{a.title}</div>
+                        <div style={{ fontSize: 12, color: "rgba(240,238,255,.5)", lineHeight: 1.6 }}>{a.detail}</div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                );
-              })()}
+                ))}
+              </div>
 
               {/* High risk apps */}
               <div className="card fu d4" style={{ padding: "20px 22px" }}>
@@ -936,21 +820,9 @@ export default function AdminPanel() {
                     <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)" }}>LAST 6 MONTHS</div>
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button className="btn btn-ghost" onClick={() => {
-                      const headers = ["ID", "Name", "Amount", "Score", "Risk", "Status", "DTI", "Credit Score", "Date"];
-                      const rows = apps.map(a => [a.id, a.name, a.amount, a.score, a.risk, a.status, a.dti, a.creditScore || "", a.date || ""].join(","));
-                      const csv = [headers.join(","), ...rows].join("\n");
-                      const blob = new Blob([csv], { type: "text/csv" });
-                      const url = URL.createObjectURL(blob);
-                      const link = document.createElement("a");
-                      link.href = url;
-                      link.download = `finntel_applications_${new Date().toISOString().slice(0, 10)}.csv`;
-                      link.click();
-                      URL.revokeObjectURL(url);
-                    }}>Export CSV</button>
-                    <button className="btn btn-ghost" onClick={() => window.print()}>Export PDF</button>
+                    <button className="btn btn-ghost">Export CSV</button>
+                    <button className="btn btn-ghost">Export PDF</button>
                   </div>
-
                 </div>
                 <div style={{ display: "flex", gap: 9, alignItems: "flex-end", height: 140 }}>
                   {monthly.map((m, i) => {
@@ -974,14 +846,14 @@ export default function AdminPanel() {
               {/* Income vs Approval */}
               <div className="card fu d2" style={{ padding: "22px 24px" }}>
                 <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Income vs Approval Correlation</div>
-                <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)", marginBottom: 18 }}>INCOME BAND ANALYSIS — LIVE DATA</div>
-                {(incomeBands.length > 0 ? incomeBands : [
-                  { band: "< ₹3L", rate: 0, count: 0, color: "#FF6B5B" },
-                  { band: "₹3L – ₹6L", rate: 0, count: 0, color: "#FFB800" },
-                  { band: "₹6L – ₹12L", rate: 0, count: 0, color: "#00D4FF" },
-                  { band: "₹12L – ₹20L", rate: 0, count: 0, color: "#00FFB3" },
-                  { band: "> ₹20L", rate: 0, count: 0, color: "#A855F7" },
-                ]).map((b, i) => (
+                <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)", marginBottom: 18 }}>INCOME BAND ANALYSIS</div>
+                {[
+                  { band: "< ₹3L", rate: 12, count: 38, color: "#FF6B5B" },
+                  { band: "₹3L – ₹6L", rate: 44, count: 187, color: "#FFB800" },
+                  { band: "₹6L – ₹12L", rate: 71, count: 412, color: "#00D4FF" },
+                  { band: "₹12L – ₹20L", rate: 88, count: 634, color: "#00FFB3" },
+                  { band: "> ₹20L", rate: 96, count: 298, color: "#A855F7" },
+                ].map((b, i) => (
                   <div key={b.band} style={{ marginBottom: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1000,12 +872,12 @@ export default function AdminPanel() {
               {/* Risk distribution */}
               <div className="card fu d3" style={{ padding: "22px 24px" }}>
                 <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Risk Distribution</div>
-                <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)", marginBottom: 18 }}>CURRENT PORTFOLIO — LIVE DATA</div>
-                {(riskDist.length > 0 ? riskDist : [
-                  { label: "Low Risk", count: 0, pct: 0, color: "#00FFB3" },
-                  { label: "Medium Risk", count: 0, pct: 0, color: "#FFB800" },
-                  { label: "High Risk", count: 0, pct: 0, color: "#FF6B5B" },
-                ]).map((r, i) => (
+                <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)", marginBottom: 18 }}>ALL TIME</div>
+                {[
+                  { label: "Low Risk", count: 3094, pct: 62, color: "#00FFB3" },
+                  { label: "Medium Risk", count: 1396, pct: 28, color: "#FFB800" },
+                  { label: "High Risk", count: 499, pct: 10, color: "#FF6B5B" },
+                ].map((r, i) => (
                   <div key={r.label} style={{ marginBottom: 20 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1034,19 +906,7 @@ export default function AdminPanel() {
                   <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 3 }}>Audit Logs</div>
                   <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.35)" }}>ALL ADMIN ACTIONS TRACKED</div>
                 </div>
-                <button className="btn btn-ghost" onClick={() => {
-                  const headers = ["Action", "User", "Type", "Time"];
-                  const rows = auditLogs.map(l => [`"${l.action.replace(/"/g, "'")}"`, l.user, l.type, l.time].join(","));
-                  const csv = [headers.join(","), ...rows].join("\n");
-                  const blob = new Blob([csv], { type: "text/csv" });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement("a");
-                  link.href = url;
-                  link.download = `finntel_audit_logs_${new Date().toISOString().slice(0, 10)}.csv`;
-                  link.click();
-                  URL.revokeObjectURL(url);
-                }}>Export Logs</button>
-
+                <button className="btn btn-ghost">Export Logs</button>
               </div>
               <div className="card fu d2" style={{ padding: "20px 22px" }}>
                 {auditLogs.map((log, i) => {
@@ -1082,7 +942,7 @@ export default function AdminPanel() {
                 {overrides.map((o, i) => {
                   const changed = o.systemDec !== o.adminDec;
                   return (
-                    <div key={i} style={{ padding: "16px 0", borderBottom: "1px solid rgba(255,255,255,.04)", display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1.5fr 1fr 1fr auto", alignItems: "center", gap: 12 }}>
+                    <div key={i} style={{ padding: "16px 0", borderBottom: "1px solid rgba(255,255,255,.04)", display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1.5fr 1fr 1fr", alignItems: "center", gap: 12 }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 800 }}>{o.name}</div>
                         <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.3)" }}>{o.appId}</div>
@@ -1104,13 +964,7 @@ export default function AdminPanel() {
                         <span className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.3)" }}>{o.date}</span>
                         {changed && <span className="chip" style={{ background: "rgba(255,184,0,.1)", border: "1px solid rgba(255,184,0,.25)", color: "#FFB800" }}>CHANGED</span>}
                       </div>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: 10, padding: "5px 10px", whiteSpace: "nowrap" }}
-                        onClick={() => router.push(`/dashboard/applications/${encodeURIComponent(o.appId)}`)}
-                      >View →</button>
                     </div>
-
                   );
                 })}
               </div>
@@ -1179,10 +1033,7 @@ export default function AdminPanel() {
               <div className="card fu d2" style={{ padding: "24px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <div className="section-lbl" style={{ color: "#00D4FF", marginBottom: 0 }}>User Management <span className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.3)" }}>({users.length} USERS)</span></div>
-                  {currentUser?.role === "super_admin"
-                    ? <button className="btn btn-primary" style={{ fontSize: 11, padding: "7px 14px" }} onClick={() => { setShowInvite(true); setInviteResult(null); setInviteError(""); }}>+ Invite User</button>
-                    : <span className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.3)", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 6, padding: "4px 10px" }}>READ ONLY</span>
-                  }
+                  <button className="btn btn-primary" style={{ fontSize: 11, padding: "7px 14px" }} onClick={() => { setShowInvite(true); setInviteResult(null); setInviteError(""); }}>+ Invite User</button>
                 </div>
 
                 {/* Invite Form */}

@@ -23,8 +23,6 @@ export default function ApplicationDetail({ params }: { params: Promise<{ id: st
   const [error, setError] = useState("");
   const [mouse, setMouse] = useState({ x: -100, y: -100 });
   const [animBars, setAnimBars] = useState(false);
-  const [changing, setChanging] = useState(false);
-  const [changeMsg, setChangeMsg] = useState("");
 
   useEffect(() => {
     const h = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
@@ -70,34 +68,6 @@ export default function ApplicationDetail({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (app) setTimeout(() => setAnimBars(true), 300);
   }, [app]);
-
-  const changeDecision = async (newDecision: string) => {
-    if (!app) return;
-    setChanging(true);
-    setChangeMsg("");
-    try {
-      const id = app.id;
-      const res = await fetch(`/api/applications/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newDecision }),
-      });
-      if (res.ok) {
-        setApp(prev => prev ? { ...prev, decision: newDecision as AppDetail["decision"] } : prev);
-        setChangeMsg(`✅ Decision changed to ${newDecision}`);
-        setTimeout(() => setChangeMsg(""), 3000);
-      } else {
-        const d = await res.json();
-        setChangeMsg(`❌ ${d.error || "Failed to update"}`);
-        setTimeout(() => setChangeMsg(""), 4000);
-      }
-    } catch {
-      setChangeMsg("❌ Network error");
-      setTimeout(() => setChangeMsg(""), 4000);
-    } finally {
-      setChanging(false);
-    }
-  };
 
   if (loading) return (
     <div style={{ fontFamily: "'Outfit',sans-serif", background: "#050508", color: "#F0EEFF", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -208,7 +178,7 @@ export default function ApplicationDetail({ params }: { params: Promise<{ id: st
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
 
           {/* Loan Details */}
-          <div className="card fu d2" style={{ padding: "22px 24px", position: "relative" }}>
+          <div className="card fu d2" style={{ padding: "22px 24px" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,transparent,#FF6BFF,#00D4FF,transparent)", animation: "scanPulse 4s ease-in-out infinite", borderRadius: "18px 18px 0 0" }} />
             <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.3)", letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 16 }}>Loan Details</div>
             <div style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-.03em", marginBottom: 4, background: "linear-gradient(135deg,#FF6BFF,#00D4FF)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
@@ -292,27 +262,12 @@ export default function ApplicationDetail({ params }: { params: Promise<{ id: st
             <div style={{ fontSize: 28, fontWeight: 900, color: decColor, letterSpacing: "-.02em" }}>
               {app.decision === "Approved" ? "✅ APPROVED" : app.decision === "Rejected" ? "❌ REJECTED" : app.decision === "Review" ? "🔍 UNDER REVIEW" : "⏳ PENDING"}
             </div>
-            {changeMsg && <div style={{ fontSize: 12, marginTop: 8, fontWeight: 700, color: changeMsg.startsWith("✅") ? "#00FFB3" : "#FF6B5B" }}>{changeMsg}</div>}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 12 }}>
-            <div style={{ textAlign: "right" }}>
-              <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.35)", textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 4 }}>Composite Score</div>
-              <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: "-.03em", color: riskColor }}>{app.score}<span style={{ fontSize: 18, opacity: .4 }}>/100</span></div>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 11, color: "rgba(240,238,255,.4)", fontWeight: 600 }}>Change decision:</span>
-              {(["Approved", "Rejected", "Review", "Pending"] as AppDetail["decision"][]).map(d => (
-                <button key={d} disabled={changing || app.decision === d}
-                  onClick={() => changeDecision(d)}
-                  style={{ fontSize: 10, padding: "5px 12px", borderRadius: 8, border: `1px solid ${DC[d]}40`, background: app.decision === d ? `${DC[d]}20` : "rgba(255,255,255,.04)", color: app.decision === d ? DC[d] : "rgba(240,238,255,.5)", fontWeight: 800, cursor: changing || app.decision === d ? "not-allowed" : "none", transition: "all .2s", opacity: app.decision === d ? 1 : 0.7 }}
-                  onMouseEnter={e => { if (!changing && app.decision !== d) { e.currentTarget.style.background = `${DC[d]}18`; e.currentTarget.style.color = DC[d]; } }}
-                  onMouseLeave={e => { if (!changing && app.decision !== d) { e.currentTarget.style.background = "rgba(255,255,255,.04)"; e.currentTarget.style.color = "rgba(240,238,255,.5)"; } }}
-                >{d}</button>
-              ))}
-            </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.35)", textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 4 }}>Composite Score</div>
+            <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: "-.03em", color: riskColor }}>{app.score}<span style={{ fontSize: 18, opacity: .4 }}>/100</span></div>
           </div>
         </div>
-
       </div>
     </div>
   );
