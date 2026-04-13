@@ -102,10 +102,30 @@ export default function AdminPanel() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ tempPassword: string; name: string } | null>(null);
   const [inviteError, setInviteError] = useState("");
+  const [showProfile, setShowProfile] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{ id: number; name: string; email: string; role: string; active: boolean } | null>(null);
+  const [sysConfig, setSysConfig] = useState({
+    autoApproveLow: true,
+    autoRejectHigh: true,
+    emailNotifications: true,
+    fraudDetection: true,
+    auditTrail: true,
+    manualReviewQueue: false,
+  });
 
   // ── Mouse & Clock ──────────────────────────────────────────────────────────
   useEffect(() => { const h = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY }); window.addEventListener("mousemove", h); return () => window.removeEventListener("mousemove", h); }, []);
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
+  // ── Close profile popup on outside click ────────────────────────────────────
+  useEffect(() => {
+    if (!showProfile) return;
+    const h = (e: MouseEvent) => {
+      const sidebar = document.getElementById("profile-area");
+      if (sidebar && !sidebar.contains(e.target as Node)) setShowProfile(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showProfile]);
 
   // ── Initial Data Fetch ────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
@@ -288,8 +308,11 @@ export default function AdminPanel() {
         select.input option{background:#0E0C1A;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;padding:8px 12px}
         select.input option:checked{background:rgba(255,107,255,.25);color:#FF6BFF}
         select.input option:hover{background:rgba(255,107,255,.15)}
-        .select{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 14px;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;outline:none;cursor:none;transition:all .3s;color-scheme:dark}
+        .select{background:#12101F;border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 14px;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;outline:none;cursor:pointer;transition:all .3s;color-scheme:dark}
         .select:focus{border-color:rgba(255,107,255,.45)}
+        .select option{background:#12101F;color:#F0EEFF;font-family:'Outfit',sans-serif;font-size:13px;padding:8px 12px}
+        .select option:checked{background:rgba(255,107,255,.25);color:#FF6BFF}
+        .select option:hover{background:rgba(255,107,255,.15)}
         .chip{display:inline-flex;align-items:center;gap:5px;border-radius:100px;padding:4px 11px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.08em;cursor:none}
         .toggle{width:36px;height:20px;border-radius:10px;position:relative;cursor:none;transition:background .3s;flex-shrink:0;border:none}
         .toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:3px;transition:left .3s}
@@ -343,13 +366,36 @@ export default function AdminPanel() {
           ))}
         </nav>
         {/* User */}
-        <div style={{ padding: "10px 8px 18px", borderTop: "1px solid rgba(255,255,255,.05)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 10, background: "rgba(255,107,255,.05)", border: "1px solid rgba(255,107,255,.1)" }}>
+        <div id="profile-area" style={{ padding: "10px 8px 18px", borderTop: "1px solid rgba(255,255,255,.05)", position: "relative" }}>
+          {/* Profile popup */}
+          {showProfile && (
+            <div style={{ position: "absolute", bottom: "calc(100% - 10px)", left: 8, right: 8, background: "#0D0B18", border: "1px solid rgba(255,107,255,.25)", borderRadius: 14, padding: "18px 16px", zIndex: 200, boxShadow: "0 -20px 60px rgba(255,107,255,.15)" }}>
+              {/* Close overlay catcher */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, marginBottom: 14 }}>
+                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "linear-gradient(135deg,#FF6BFF,#A855F7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, boxShadow: "0 0 24px rgba(255,107,255,.4)" }}>AJ</div>
+                <div style={{ fontSize: 14, fontWeight: 800, marginTop: 6, color: "#F0EEFF" }}>Aryan Joshi</div>
+                <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 9, color: "rgba(240,238,255,.38)", letterSpacing: ".08em" }}>SUPER ADMIN</div>
+                <div style={{ fontSize: 11, color: "rgba(240,238,255,.4)", marginTop: 2 }}>aryan@finntel.ai</div>
+              </div>
+              <div style={{ height: 1, background: "rgba(255,255,255,.06)", marginBottom: 12 }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "flex-start", fontSize: 12 }} onClick={() => { setShowProfile(false); setNav("settings"); }}>⚙️ &nbsp;Settings</button>
+                <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "flex-start", fontSize: 12 }} onClick={() => { setShowProfile(false); setNav("audit"); }}>📜 &nbsp;Audit Logs</button>
+                <button className="btn btn-danger" style={{ width: "100%", justifyContent: "flex-start", fontSize: 12, marginTop: 4 }} onClick={() => { setShowProfile(false); handleLogout(); }}>⏻ &nbsp;Sign Out</button>
+              </div>
+            </div>
+          )}
+          <div
+            onClick={() => setShowProfile(o => !o)}
+            style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 10, background: showProfile ? "rgba(255,107,255,.1)" : "rgba(255,107,255,.05)", border: `1px solid ${showProfile ? "rgba(255,107,255,.3)" : "rgba(255,107,255,.1)"}`, cursor: "pointer", transition: "all .2s", userSelect: "none" }}
+            onMouseEnter={e => { if (!showProfile) { e.currentTarget.style.background = "rgba(255,107,255,.09)"; e.currentTarget.style.borderColor = "rgba(255,107,255,.22)"; } }}
+            onMouseLeave={e => { if (!showProfile) { e.currentTarget.style.background = "rgba(255,107,255,.05)"; e.currentTarget.style.borderColor = "rgba(255,107,255,.1)"; } }}
+          >
             <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,#FF6BFF,#A855F7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>AJ</div>
             {sidebar && <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 800 }}>Aryan Joshi</div><div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)" }}>Super Admin</div></div>}
             {sidebar && (
-              <button onClick={handleLogout} title="Sign out"
-                style={{ background: "none", border: "1px solid rgba(255,107,91,0.3)", borderRadius: 7, padding: "4px 7px", cursor: "none", color: "rgba(255,107,91,0.7)", fontSize: 11, fontWeight: 700, transition: "all 0.2s" }}
+              <button onClick={e => { e.stopPropagation(); handleLogout(); }} title="Sign out"
+                style={{ background: "none", border: "1px solid rgba(255,107,91,0.3)", borderRadius: 7, padding: "4px 7px", cursor: "pointer", color: "rgba(255,107,91,0.7)", fontSize: 11, fontWeight: 700, transition: "all 0.2s" }}
                 onMouseEnter={e => { e.currentTarget.style.color = "#FF6B5B"; e.currentTarget.style.borderColor = "#FF6B5B"; }}
                 onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,107,91,0.7)"; e.currentTarget.style.borderColor = "rgba(255,107,91,0.3)"; }}>
                 ⏻
@@ -392,18 +438,18 @@ export default function AdminPanel() {
               {/* KPI row */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 20 }}>
                 {[
-                  { label: "Total Apps", value: total, color: "#FF6BFF", icon: "📋" },
-                  { label: "Approved", value: approved, color: "#00FFB3", icon: "✅" },
-                  { label: "Rejected", value: rejected, color: "#FF6B5B", icon: "❌" },
-                  { label: "Pending", value: pending, color: "#FFB800", icon: "⏳" },
-                  { label: "Avg Score", value: avgScore, color: "#00D4FF", icon: "📊" },
-                  { label: "High Risk", value: highRisk, color: "#FF6B5B", icon: "🚨" },
+                  { label: "Total Apps", value: total, color: "#FF6BFF", icon: "📋", hint: "View all →", action: () => { setNav("applications"); setFS("All"); setFR("All"); } },
+                  { label: "Approved", value: approved, color: "#00FFB3", icon: "✅", hint: "View approved →", action: () => { setNav("applications"); setFS("Approved"); setFR("All"); } },
+                  { label: "Rejected", value: rejected, color: "#FF6B5B", icon: "❌", hint: "View rejected →", action: () => { setNav("applications"); setFS("Rejected"); setFR("All"); } },
+                  { label: "Pending", value: pending, color: "#FFB800", icon: "⏳", hint: "View pending →", action: () => { setNav("applications"); setFS("Pending"); setFR("All"); } },
+                  { label: "Avg Score", value: avgScore, color: "#00D4FF", icon: "📊", hint: "View analytics →", action: () => setNav("analytics") },
+                  { label: "High Risk", value: highRisk, color: "#FF6B5B", icon: "🚨", hint: "Drilldown →", action: () => setShowHighRiskPanel(true) },
                 ].map((c, i) => (
                   <div key={c.label} className={`card fu d${i + 1}`}
-                    style={{ padding: "18px 20px", cursor: c.label === "High Risk" ? "pointer" : "default", transition: "transform .2s, box-shadow .2s" }}
-                    onClick={c.label === "High Risk" ? () => setShowHighRiskPanel(true) : undefined}
-                    onMouseEnter={c.label === "High Risk" ? e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(255,107,91,.18)"; } : undefined}
-                    onMouseLeave={c.label === "High Risk" ? e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; } : undefined}>
+                    onClick={c.action}
+                    style={{ padding: "18px 20px", cursor: "pointer", transition: "transform .2s, box-shadow .2s" }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = `0 10px 28px ${c.color}22`; e.currentTarget.style.borderColor = `${c.color}30`; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(255,255,255,.07)"; }}>
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,transparent,${c.color}60,transparent)`, animation: "scan 3s ease-in-out infinite", animationDelay: `${i * .4}s`, pointerEvents: "none" }} />
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(240,238,255,.38)", letterSpacing: ".05em", textTransform: "uppercase" }}>{c.label}</span>
@@ -411,7 +457,7 @@ export default function AdminPanel() {
                     </div>
                     <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: "-0.04em", color: c.color, lineHeight: 1 }}>{c.value}</div>
                     {c.label === "Total Apps" && <div style={{ fontSize: 11, color: "rgba(240,238,255,.35)", marginTop: 5 }}>Approval: {approvalRate}%</div>}
-                    {c.label === "High Risk" && <div style={{ fontSize: 10, color: "rgba(255,107,91,.6)", marginTop: 5, fontWeight: 600 }}>Click to drilldown →</div>}
+                    <div style={{ fontSize: 10, color: `${c.color}90`, marginTop: 5, fontWeight: 600 }}>{c.hint}</div>
                   </div>
                 ))}
               </div>
@@ -583,9 +629,31 @@ export default function AdminPanel() {
                     <button key={s} className={`tab-pill ${filterStatus === s ? "on" : ""}`} onClick={() => setFS(s)}>{s}</button>
                   ))}
                 </div>
-                <button className="btn btn-ghost">
+                <button className="btn btn-ghost" onClick={() => {
+                  const headers = ["ID", "Applicant", "Amount", "Score", "Risk", "DTI", "Income", "Credit Score", "Status", "Date"];
+                  const rows = filtered.map(a => [
+                    a.id,
+                    a.name,
+                    a.amount,
+                    a.score,
+                    a.risk,
+                    a.dti,
+                    a.income,
+                    a.creditScore,
+                    a.status,
+                    a.date,
+                  ]);
+                  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+                  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `finntel-applications-${new Date().toISOString().slice(0, 10)}.csv`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                  Export
+                  Export CSV
                 </button>
               </div>
 
@@ -647,7 +715,19 @@ export default function AdminPanel() {
                   <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 3 }}>Rule Engine Management</div>
                   <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.35)", letterSpacing: ".08em" }}>{rules.filter(r => r.enabled).length} ACTIVE RULES · {rules.filter(r => !r.enabled).length} DISABLED</div>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowAddRule(true)}>+ Add Rule</button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn btn-ghost" onClick={() => {
+                    const headers = ["ID", "Condition", "Action", "Category", "Impact", "Enabled"];
+                    const rows = rules.map(r => [r.id, `"${r.condition}"`, r.action, r.category, r.impact, r.enabled ? "Yes" : "No"]);
+                    const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+                    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a"); link.href = url;
+                    link.download = `finntel-rules-${new Date().toISOString().slice(0,10)}.csv`;
+                    link.click(); URL.revokeObjectURL(url);
+                  }}>📥 Export CSV</button>
+                  <button className="btn btn-primary" onClick={() => setShowAddRule(true)}>+ Add Rule</button>
+                </div>
               </div>
 
               {/* Add Rule Form */}
@@ -906,7 +986,16 @@ export default function AdminPanel() {
                   <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 3 }}>Audit Logs</div>
                   <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.35)" }}>ALL ADMIN ACTIONS TRACKED</div>
                 </div>
-                <button className="btn btn-ghost">Export Logs</button>
+                <button className="btn btn-ghost" onClick={() => {
+                  const headers = ["ID", "Action", "User", "Type", "Time"];
+                  const rows = auditLogs.map(l => [l.id, `"${l.action}"`, `"${l.user}"`, l.type, `"${l.time}"` ]);
+                  const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+                  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a"); link.href = url;
+                  link.download = `finntel-audit-logs-${new Date().toISOString().slice(0,10)}.csv`;
+                  link.click(); URL.revokeObjectURL(url);
+                }}>📥 Export Logs</button>
               </div>
               <div className="card fu d2" style={{ padding: "20px 22px" }}>
                 {auditLogs.map((log, i) => {
@@ -1033,7 +1122,19 @@ export default function AdminPanel() {
               <div className="card fu d2" style={{ padding: "24px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <div className="section-lbl" style={{ color: "#00D4FF", marginBottom: 0 }}>User Management <span className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.3)" }}>({users.length} USERS)</span></div>
-                  <button className="btn btn-primary" style={{ fontSize: 11, padding: "7px 14px" }} onClick={() => { setShowInvite(true); setInviteResult(null); setInviteError(""); }}>+ Invite User</button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn btn-ghost" style={{ fontSize: 11, padding: "7px 14px" }} onClick={() => {
+                      const headers = ["ID", "Name", "Email", "Role", "Active"];
+                      const rows = users.map((u: { id: number; name: string; email: string; role: string; active: boolean }) => [u.id, `"${u.name}"`, u.email, u.role, u.active ? "Yes" : "No"]);
+                      const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a"); link.href = url;
+                      link.download = `finntel-users-${new Date().toISOString().slice(0,10)}.csv`;
+                      link.click(); URL.revokeObjectURL(url);
+                    }}>📥 Export CSV</button>
+                    <button className="btn btn-primary" style={{ fontSize: 11, padding: "7px 14px" }} onClick={() => { setShowInvite(true); setInviteResult(null); setInviteError(""); }}>+ Invite User</button>
+                  </div>
                 </div>
 
                 {/* Invite Form */}
@@ -1083,9 +1184,12 @@ export default function AdminPanel() {
                   const roleColor = u.role === "super_admin" ? "#FF6BFF" : u.role === "analyst" ? "#00D4FF" : "#A855F7";
                   const roleLabel = u.role === "super_admin" ? "Super Admin" : u.role === "analyst" ? "Analyst" : "Viewer";
                   return (
-                    <div key={u.id} className="row" style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div key={u.id} className="row" onClick={() => setSelectedUser(u)}
+                      style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "all .2s" }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = `${roleColor}40`}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,.045)"}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,rgba(255,107,255,.3),rgba(0,212,255,.2))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg,${roleColor}50,${roleColor}20)`, border: `1px solid ${roleColor}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800 }}>
                           {u.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
                         </div>
                         <div>
@@ -1096,7 +1200,7 @@ export default function AdminPanel() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 11, fontWeight: 800, color: roleColor, background: `${roleColor}18`, padding: "3px 10px", borderRadius: 6 }}>{roleLabel}</span>
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: u.active ? "#00FFB3" : "rgba(255,255,255,.2)", boxShadow: u.active ? "0 0 8px #00FFB380" : "none" }} />
-                        <button className="btn btn-danger" style={{ fontSize: 9, padding: "3px 8px" }} onClick={() => removeUser(u.id)}>Remove</button>
+                        <button className="btn btn-danger" style={{ fontSize: 9, padding: "3px 8px" }} onClick={e => { e.stopPropagation(); removeUser(u.id); }}>Remove</button>
                       </div>
                     </div>
                   );
@@ -1107,24 +1211,31 @@ export default function AdminPanel() {
               <div className="card fu d3" style={{ padding: "24px", gridColumn: "1/-1" }}>
                 <div className="section-lbl" style={{ color: "#00FFB3" }}>System Configuration</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-                  {[
-                    { label: "Auto-approve Low Risk", desc: "Automatically approve score ≥ 85", on: true },
-                    { label: "Auto-reject High Risk", desc: "Automatically reject score ≤ 25", on: true },
-                    { label: "Email notifications", desc: "Send alerts on high-risk apps", on: true },
-                    { label: "Fraud detection", desc: "Enable pattern-based flagging", on: true },
-                    { label: "Audit trail", desc: "Log all admin actions", on: true },
-                    { label: "Manual review queue", desc: "Queue medium-risk for review", on: false },
-                  ].map((c, i) => (
-                    <div key={i} className="row" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start", padding: "14px 16px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
-                        <span style={{ fontSize: 13, fontWeight: 800 }}>{c.label}</span>
-                        <div style={{ width: 36, height: 20, borderRadius: 10, background: c.on ? "linear-gradient(135deg,#FF6BFF,#00D4FF)" : "rgba(255,255,255,.12)", position: "relative", flexShrink: 0, cursor: "none" }}>
-                          <div style={{ position: "absolute", width: 14, height: 14, borderRadius: "50%", background: "#fff", top: 3, left: c.on ? 19 : 3, transition: "left .3s" }} />
+                  {([
+                    { label: "Auto-approve Low Risk", desc: "Automatically approve score ≥ 85", key: "autoApproveLow" as const },
+                    { label: "Auto-reject High Risk", desc: "Automatically reject score ≤ 25", key: "autoRejectHigh" as const },
+                    { label: "Email notifications", desc: "Send alerts on high-risk apps", key: "emailNotifications" as const },
+                    { label: "Fraud detection", desc: "Enable pattern-based flagging", key: "fraudDetection" as const },
+                    { label: "Audit trail", desc: "Log all admin actions", key: "auditTrail" as const },
+                    { label: "Manual review queue", desc: "Queue medium-risk for review", key: "manualReviewQueue" as const },
+                  ] as const).map((c) => {
+                    const on = sysConfig[c.key];
+                    return (
+                      <div key={c.key} className="row"
+                        onClick={() => setSysConfig(prev => ({ ...prev, [c.key]: !prev[c.key] }))}
+                        style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start", padding: "14px 16px", cursor: "pointer", transition: "all .2s", borderColor: on ? "rgba(0,255,179,.15)" : "rgba(255,255,255,.045)" }}
+                        onMouseEnter={e => e.currentTarget.style.background = on ? "rgba(0,255,179,.04)" : "rgba(255,255,255,.03)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,.02)"}>
+                        <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: on ? "#F0EEFF" : "rgba(240,238,255,.5)" }}>{c.label}</span>
+                          <div style={{ width: 36, height: 20, borderRadius: 10, background: on ? "linear-gradient(135deg,#FF6BFF,#00D4FF)" : "rgba(255,255,255,.12)", position: "relative", flexShrink: 0, cursor: "pointer", transition: "background .3s", boxShadow: on ? "0 0 10px rgba(255,107,255,.3)" : "none" }}>
+                            <div style={{ position: "absolute", width: 14, height: 14, borderRadius: "50%", background: "#fff", top: 3, left: on ? 19 : 3, transition: "left .3s", boxShadow: "0 1px 4px rgba(0,0,0,.3)" }} />
+                          </div>
                         </div>
+                        <span style={{ fontSize: 11, color: "rgba(240,238,255,.38)" }}>{c.desc}</span>
                       </div>
-                      <span style={{ fontSize: 11, color: "rgba(240,238,255,.38)" }}>{c.desc}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1270,6 +1381,79 @@ export default function AdminPanel() {
           </div>
         </div>
       )}
+
+      {/* ── USER PROFILE MODAL ── */}
+      {selectedUser && (() => {
+        const u = selectedUser;
+        const roleColor = u.role === "super_admin" ? "#FF6BFF" : u.role === "analyst" ? "#00D4FF" : "#A855F7";
+        const roleLabel = u.role === "super_admin" ? "Super Admin" : u.role === "analyst" ? "Analyst" : "Viewer";
+        const roleIcon = u.role === "super_admin" ? "👑" : u.role === "analyst" ? "🔍" : "👁";
+        const initials = u.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+        return (
+          <div className="modal-bg" onClick={e => { if (e.target === e.currentTarget) setSelectedUser(null); }}>
+            <div className="modal" style={{ width: 420 }}>
+              {/* Header accent bar */}
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg,${roleColor},${roleColor}00)`, borderRadius: "18px 18px 0 0" }} />
+
+              {/* Close */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+                <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setSelectedUser(null)}>✕</button>
+              </div>
+
+              {/* Avatar + identity */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, marginBottom: 22 }}>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: `linear-gradient(135deg,${roleColor}70,${roleColor}25)`, border: `2px solid ${roleColor}50`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 900, boxShadow: `0 0 32px ${roleColor}35`, marginBottom: 4 }}>
+                  {initials}
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#F0EEFF" }}>{u.name}</div>
+                <div style={{ fontSize: 12, color: "rgba(240,238,255,.45)" }}>{u.email}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: roleColor, background: `${roleColor}15`, border: `1px solid ${roleColor}30`, padding: "4px 12px", borderRadius: 100 }}>{roleIcon} {roleLabel}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: u.active ? "#00FFB3" : "rgba(240,238,255,.35)" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: u.active ? "#00FFB3" : "rgba(255,255,255,.2)", boxShadow: u.active ? "0 0 8px #00FFB3" : "none", display: "inline-block" }} />
+                    {u.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Stats grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
+                {[
+                  { label: "Role", value: roleLabel, color: roleColor },
+                  { label: "Status", value: u.active ? "Active" : "Inactive", color: u.active ? "#00FFB3" : "rgba(240,238,255,.35)" },
+                  { label: "User ID", value: `#${u.id}`, color: "rgba(240,238,255,.6)" },
+                ].map(s => (
+                  <div key={s.label} style={{ padding: "12px 14px", background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "rgba(240,238,255,.35)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>{s.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: s.color }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Email row */}
+              <div style={{ padding: "12px 16px", background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 18 }}>✉️</span>
+                <div>
+                  <div style={{ fontSize: 9, color: "rgba(240,238,255,.35)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 3 }}>Email</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(240,238,255,.8)" }}>{u.email}</div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center", fontSize: 12, padding: "10px" }}
+                  onClick={() => { setSelectedUser(null); setNav("audit"); }}>
+                  📜 View Audit Logs
+                </button>
+                <button className="btn btn-danger" style={{ flex: 1, justifyContent: "center", fontSize: 12, padding: "10px" }}
+                  onClick={() => { removeUser(u.id); setSelectedUser(null); }}>
+                  🗑 Remove User
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

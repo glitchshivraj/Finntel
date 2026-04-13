@@ -88,15 +88,15 @@ export default function AuthPage() {
         @keyframes scanPulse { 0% { transform:translateY(-200%); opacity:0; } 15% { opacity:1; } 85% { opacity:1; } 100% { transform:translateY(4000%); opacity:0; } }
         @keyframes checkBounce { 0% { transform:scale(0) rotate(-10deg); opacity:0; } 60% { transform:scale(1.2) rotate(4deg); opacity:1; } 100% { transform:scale(1) rotate(0deg); opacity:1; } }
         .gradient-text { background: linear-gradient(135deg, #FF6BFF 0%, #A855F7 30%, #00D4FF 65%, #00FFB3 100%); background-size: 250% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: shimmer 5s linear infinite; }
-        .auth-input { width: 100%; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; color: #F0EEFF; font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 500; outline: none; transition: all 0.3s ease; cursor: none; }
+        .auth-input { width: 100%; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; color: #F0EEFF; font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 500; outline: none; transition: all 0.3s ease; cursor: text; }
         .auth-input::placeholder { color: rgba(240,238,255,0.28); }
         .auth-input:focus { border-color: rgba(255,107,255,0.45); background: rgba(255,107,255,0.04); box-shadow: 0 0 0 3px rgba(255,107,255,0.08), 0 0 20px rgba(255,107,255,0.1); }
-        .cta-btn { width: 100%; background: linear-gradient(135deg, #FF6BFF 0%, #A855F7 50%, #00D4FF 100%); background-size: 200% 200%; animation: gradientShift 4s ease infinite; color: #fff; border: none; border-radius: 12px; padding: 15px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 16px; cursor: none; transition: all 0.3s ease; letter-spacing: 0.01em; position: relative; overflow: hidden; }
+        .cta-btn { width: 100%; background: linear-gradient(135deg, #FF6BFF 0%, #A855F7 50%, #00D4FF 100%); background-size: 200% 200%; animation: gradientShift 4s ease infinite; color: #fff; border: none; border-radius: 12px; padding: 15px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer; transition: all 0.3s ease; letter-spacing: 0.01em; position: relative; overflow: hidden; }
         .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 20px 50px rgba(255,107,255,0.45), 0 0 30px rgba(168,85,247,0.35); }
         .cta-btn:disabled { opacity: 0.7; transform: none; }
-        .google-btn { width: 100%; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 14px 20px; color: rgba(240,238,255,0.75); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 15px; cursor: none; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 12px; }
+        .google-btn { width: 100%; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 14px 20px; color: rgba(240,238,255,0.75); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 12px; }
         .google-btn:hover { border-color: rgba(255,107,255,0.35); background: rgba(255,107,255,0.05); color: #F0EEFF; transform: translateY(-2px); box-shadow: 0 12px 36px rgba(255,107,255,0.14); }
-        .tab-btn { flex: 1; padding: 11px; border: none; border-radius: 10px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 14px; cursor: none; transition: all 0.3s ease; letter-spacing: 0.01em; }
+        .tab-btn { flex: 1; padding: 11px; border: none; border-radius: 10px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 14px; cursor: pointer; transition: all 0.3s ease; letter-spacing: 0.01em; }
         .form-slide { animation: slideIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
         .fade-up { animation: fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
         .d1 { animation-delay:0.05s; opacity:0; } .d2 { animation-delay:0.18s; opacity:0; } .d3 { animation-delay:0.3s; opacity:0; }
@@ -161,7 +161,7 @@ export default function AuthPage() {
 
             {/* GOOGLE BTN */}
             <div style={{ position:"relative", zIndex:1, marginBottom:22 }}>
-              <button className="google-btn">
+              <button className="google-btn" onClick={() => { window.location.href = "/api/auth/google"; }}>
                 <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
                 Continue with Google
               </button>
@@ -264,7 +264,7 @@ export default function AuthPage() {
 
               <p style={{ textAlign:"center", marginTop:18, fontSize:14, color:"rgba(240,238,255,0.38)" }}>
                 {tab === "login" ? "Don't have an account? " : "Already have an account? "}
-                <button onClick={() => { setTab(tab === "login" ? "signup" : "login"); setError(""); }} style={{ background:"none", border:"none", color:"#FF6BFF", fontFamily:"'Outfit',sans-serif", fontWeight:800, fontSize:14, cursor:"none", padding:0 }}>
+                <button onClick={() => { setTab(tab === "login" ? "signup" : "login"); setError(""); }} style={{ background:"none", border:"none", color:"#FF6BFF", fontFamily:"'Outfit',sans-serif", fontWeight:800, fontSize:14, cursor:"pointer", padding:0 }}>
                   {tab === "login" ? "Sign up free" : "Sign in"}
                 </button>
               </p>
