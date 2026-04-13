@@ -41,8 +41,7 @@ function AuthPageInner() {
         });
         const data = await res.json();
         if (!res.ok) { setError(data.error || "Login failed"); setLoading(false); return; }
-        // Small delay lets the browser commit the Set-Cookie header before navigation
-        setTimeout(() => { window.location.replace(redirectTo); }, 100);
+        router.push(redirectTo);
       } else {
         if (signupPass !== signupConfirm) { setError("Passwords don't match"); setLoading(false); return; }
         if (!agree) { setError("Please accept the terms"); setLoading(false); return; }
@@ -53,8 +52,7 @@ function AuthPageInner() {
         });
         const data = await res.json();
         if (!res.ok) { setError(data.error || "Sign up failed"); setLoading(false); return; }
-        // Small delay lets the browser commit the Set-Cookie header before navigation
-        setTimeout(() => { window.location.replace(redirectTo); }, 100);
+        router.push(redirectTo);
       }
     } catch {
       setError("Network error. Please try again.");

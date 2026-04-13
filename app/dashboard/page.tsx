@@ -127,13 +127,7 @@ export default function AdminPanel() {
         fetch("/api/analytics/risk-distribution"),
         fetch("/api/analytics/income-bands"),
       ]);
-      // Check auth on the /me endpoint first — consume all bodies to avoid leaks
-      if (meRes.status === 401) {
-        // Drain remaining bodies
-        await Promise.allSettled([appsRes.text(), rulesRes.text(), logsRes.text(), overridesRes.text(), monthlyRes.text(), configRes.text(), usersRes.text(), meRes.text(), rdRes.text(), ibRes.text()]);
-        router.push("/auth");
-        return;
-      }
+      if (appsRes.status === 401) { router.push("/auth"); return; }
       const [ad, rd, ld, od, md, cd, ud, me, rdData, ibData] = await Promise.all([appsRes.json(), rulesRes.json(), logsRes.json(), overridesRes.json(), monthlyRes.json(), configRes.json(), usersRes.json(), meRes.json(), rdRes.json(), ibRes.json()]);
       if (ad.applications) setApps(ad.applications);
       if (rd.rules) setRules(rd.rules);
