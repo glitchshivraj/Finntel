@@ -112,6 +112,10 @@ export default function AdminPanel() {
     auditTrail: true,
     manualReviewQueue: false,
   });
+  const [selectedMonth, setSelectedMonth] = useState<{ month: string; approved: number; rejected: number; pending: number } | null>(null);
+  const [ruleFormError, setRuleFormError] = useState("");
+  const [toast, setToast] = useState("");
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
   // ── Mouse & Clock ──────────────────────────────────────────────────────────
   useEffect(() => { const h = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY }); window.addEventListener("mousemove", h); return () => window.removeEventListener("mousemove", h); }, []);
@@ -199,10 +203,11 @@ export default function AdminPanel() {
     if (ld.logs) setAuditLogs(ld.logs);
   }
   async function addRule() {
-    if (!newRule.condition) return;
+    if (!newRule.condition.trim()) { setRuleFormError("Condition is required — e.g. \"DTI > 55%\""); return; }
+    setRuleFormError("");
     const res = await fetch("/api/rules", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(newRule) });
     const data = await res.json();
-    if (data.rule) setRules(prev => [...prev, data.rule]);
+    if (data.rule) { setRules(prev => [...prev, data.rule]); showToast("✅ Rule added successfully"); }
     setNewRule({ condition: "", action: "Reject", category: "Credit" });
     setShowAddRule(false);
     const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
@@ -213,6 +218,7 @@ export default function AdminPanel() {
     const app = overrideApp;
     await fetch("/api/overrides", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ appId: app.id, name: app.name, systemDec: app.status, adminDec: overrideDec, reason: overrideReason }) });
     setApps(prev => prev.map(a => a.id === app.id ? { ...a, status: overrideDec } : a));
+    showToast(`✅ Override applied — ${app.name} → ${overrideDec}`);
     const [od, ld] = await Promise.all([fetch("/api/overrides").then(r=>r.json()), fetch("/api/audit-logs?limit=50").then(r=>r.json())]);
     if (od.overrides) setOverrides(od.overrides);
     if (ld.logs) setAuditLogs(ld.logs);
@@ -220,6 +226,7 @@ export default function AdminPanel() {
   }
   async function saveThresholds() {
     await fetch("/api/settings/thresholds", { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ min_credit_score: String(thresholds.minCredit), max_dti: String(thresholds.maxDTI), max_lti: String(thresholds.maxLTI), min_income: String(thresholds.minIncome) }) });
+    showToast("✅ Thresholds saved");
     const ld = await fetch("/api/audit-logs?limit=50").then(r => r.json());
     if (ld.logs) setAuditLogs(ld.logs);
   }
@@ -462,22 +469,66 @@ export default function AdminPanel() {
                 ))}
               </div>
 
-              {/* Alerts & Warnings */}
-              <div className="fu d1" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
-                {[
-                  { icon: "🚨", title: "High-risk approval detected", detail: "2 high-risk applications approved this week — review manual overrides.", level: "red" },
-                  { icon: "📉", title: "Rejection spike +15%", detail: "Rejections up 15% this month due to stricter DTI rules applied.", level: "red" },
-                  { icon: "⚠️", title: "Rule conflict detected", detail: "Rules #2 & #6 overlap on DTI thresholds — may cause inconsistent flags.", level: "yellow" },
-                ].map((a, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 14px", background: a.level === "red" ? "rgba(255,107,91,.05)" : "rgba(255,184,0,.04)", border: `1px solid ${a.level === "red" ? "rgba(255,107,91,.2)" : "rgba(255,184,0,.16)"}`, borderRadius: 11, borderLeft: `3px solid ${a.level === "red" ? "#FF6B5B" : "#FFB800"}` }}>
-                    <span style={{ fontSize: 15, flexShrink: 0 }}>{a.icon}</span>
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 800, color: a.level === "red" ? "#FF6B5B" : "#FFB800", marginBottom: 3 }}>{a.title}</div>
-                      <div style={{ fontSize: 10, color: "rgba(240,238,255,.45)", lineHeight: 1.55 }}>{a.detail}</div>
-                    </div>
+              {/* Alerts & Warnings — computed from live state */}
+              {(() => {
+                // 1. High-risk approvals from actual apps
+                const highRiskApproved = apps.filter(a => a.risk === "High" && a.status === "Approved");
+
+                // 2. Rejection spike: compare last two months
+                const prev = monthly[monthly.length - 2];
+                const curr = monthly[monthly.length - 1];
+                const spikeVal = prev && curr && prev.rejected > 0
+                  ? Math.round(((curr.rejected - prev.rejected) / prev.rejected) * 100)
+                  : 0;
+
+                // 3. Rule conflicts: enabled rules with DTI in condition
+                const dtiRules = rules.filter(r => r.enabled && r.condition.toLowerCase().includes("dti"));
+                const conflictIds = dtiRules.map(r => `#${r.id}`).join(" & ");
+
+                const dynamicAlerts = [
+                  highRiskApproved.length > 0 && {
+                    icon: "🚨",
+                    title: "High-risk approval detected",
+                    detail: `${highRiskApproved.length} high-risk application${highRiskApproved.length > 1 ? "s" : ""} approved — review manual overrides.`,
+                    level: "red",
+                    action: () => setNav("monitoring"),
+                  },
+                  spikeVal > 5 && {
+                    icon: "📉",
+                    title: `Rejection spike +${spikeVal}%`,
+                    detail: `Rejections up ${spikeVal}% vs last month (${curr?.rejected ?? 0} vs ${prev?.rejected ?? 0}) — DTI rules may be too strict.`,
+                    level: "red",
+                    action: () => setNav("analytics"),
+                  },
+                  dtiRules.length >= 2 && {
+                    icon: "⚠️",
+                    title: "Rule conflict detected",
+                    detail: `Rules ${conflictIds} overlap on DTI thresholds — may cause inconsistent flags.`,
+                    level: "yellow",
+                    action: () => setNav("rules"),
+                  },
+                ].filter(Boolean) as { icon: string; title: string; detail: string; level: string; action: () => void }[];
+
+                if (dynamicAlerts.length === 0) return null;
+
+                return (
+                  <div className="fu d1" style={{ display: "grid", gridTemplateColumns: `repeat(${dynamicAlerts.length}, 1fr)`, gap: 10, marginBottom: 18 }}>
+                    {dynamicAlerts.map((a, i) => (
+                      <div key={i} onClick={a.action}
+                        style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 14px", background: a.level === "red" ? "rgba(255,107,91,.05)" : "rgba(255,184,0,.04)", border: `1px solid ${a.level === "red" ? "rgba(255,107,91,.2)" : "rgba(255,184,0,.16)"}`, borderRadius: 11, borderLeft: `3px solid ${a.level === "red" ? "#FF6B5B" : "#FFB800"}`, cursor: "pointer", transition: "all .2s" }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 8px 24px ${a.level === "red" ? "rgba(255,107,91,.12)" : "rgba(255,184,0,.1)"}`; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+                        <span style={{ fontSize: 15, flexShrink: 0 }}>{a.icon}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: a.level === "red" ? "#FF6B5B" : "#FFB800", marginBottom: 3 }}>{a.title}</div>
+                          <div style={{ fontSize: 10, color: "rgba(240,238,255,.45)", lineHeight: 1.55 }}>{a.detail}</div>
+                        </div>
+                        <span style={{ fontSize: 12, color: a.level === "red" ? "#FF6B5B" : "#FFB800", flexShrink: 0, alignSelf: "center" }}>→</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
 
               {/* Charts row */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 14, marginBottom: 20 }}>
@@ -502,8 +553,12 @@ export default function AdminPanel() {
                       const total = m.approved + m.rejected + m.pending;
                       const h = barH[i] ? (total / maxBar) * 110 : 0;
                       return (
-                        <div key={m.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-                          <div style={{ width: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end", height: 110, gap: 1 }}>
+                        <div key={m.month}
+                          onClick={() => setSelectedMonth(m)}
+                          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "pointer", transition: "opacity .2s, transform .2s", transformOrigin: "bottom" }}
+                          onMouseEnter={e => { e.currentTarget.style.opacity = "0.75"; e.currentTarget.style.transform = "scaleY(1.04)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "none"; }}>
+                          <div style={{ width: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end", height: 110, gap: 1, borderRadius: 5, overflow: "hidden" }}>
                             <div style={{ width: "100%", height: h ? (m.rejected / total) * h + "px" : "0", background: "#FF6B5B", borderRadius: "3px 3px 0 0", transition: "height 1.2s cubic-bezier(.16,1,.3,1)" }} />
                             <div style={{ width: "100%", height: h ? (m.pending / total) * h + "px" : "0", background: "#FFB800", transition: "height 1.2s cubic-bezier(.16,1,.3,1)" }} />
                             <div style={{ width: "100%", height: h ? (m.approved / total) * h + "px" : "0", background: "linear-gradient(180deg,#00FFB3,#00D4FF)", transition: "height 1.2s cubic-bezier(.16,1,.3,1)" }} />
@@ -513,8 +568,10 @@ export default function AdminPanel() {
                       );
                     })}
                   </div>
-                  <div style={{ marginTop: 12, padding: "10px 13px", background: "rgba(255,184,0,.04)", border: "1px solid rgba(255,184,0,.13)", borderRadius: 9, borderLeft: "3px solid #FFB800" }}>
-                    <span style={{ fontSize: 11, color: "rgba(240,238,255,.5)", lineHeight: 1.6 }}>💡 <strong style={{ color: "#FFB800" }}>Insight:</strong> Rejections rose 15% in Dec from stricter DTI rules. March shows recovery with the lowest rejection count (9) in 6 months.</span>
+                  <div onClick={() => setNav("analytics")} style={{ marginTop: 12, padding: "10px 13px", background: "rgba(255,184,0,.04)", border: "1px solid rgba(255,184,0,.13)", borderRadius: 9, borderLeft: "3px solid #FFB800", cursor: "pointer", transition: "all .2s" }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,184,0,.08)"; e.currentTarget.style.borderColor = "rgba(255,184,0,.3)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,184,0,.04)"; e.currentTarget.style.borderColor = "rgba(255,184,0,.13)"; }}>
+                    <span style={{ fontSize: 11, color: "rgba(240,238,255,.5)", lineHeight: 1.6 }}>💡 <strong style={{ color: "#FFB800" }}>Insight:</strong> Rejections rose 15% in Dec from stricter DTI rules. March shows recovery with the lowest rejection count (9) in 6 months. <span style={{ color: "#FFB800", fontWeight: 700 }}>View Analytics →</span></span>
                   </div>
                 </div>
 
@@ -732,12 +789,15 @@ export default function AdminPanel() {
 
               {/* Add Rule Form */}
               {showAddRule && (
-                <div className="card fu d1" style={{ padding: "20px 22px", marginBottom: 14, border: "1px solid rgba(255,107,255,.25)", background: "rgba(255,107,255,.04)" }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 14 }}>Add New Rule</div>
+                <div className="card fu d1" style={{ padding: "20px 22px", marginBottom: 14, border: `1px solid ${ruleFormError ? "rgba(255,107,91,.4)" : "rgba(255,107,255,.25)"}`, background: ruleFormError ? "rgba(255,107,91,.04)" : "rgba(255,107,255,.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800 }}>Add New Rule</div>
+                    {ruleFormError && <div style={{ fontSize: 11, color: "#FF6B5B", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>⚠ {ruleFormError}</div>}
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px auto", gap: 12, alignItems: "flex-end" }}>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: "rgba(240,238,255,.45)", display: "block", marginBottom: 7, letterSpacing: ".05em", textTransform: "uppercase" }}>Condition</label>
-                      <input className="input" placeholder="e.g. Credit Score < 600" value={newRule.condition} onChange={e => setNewRule(p => ({ ...p, condition: e.target.value }))} />
+                      <label style={{ fontSize: 11, fontWeight: 700, color: ruleFormError ? "#FF6B5B" : "rgba(240,238,255,.45)", display: "block", marginBottom: 7, letterSpacing: ".05em", textTransform: "uppercase" }}>Condition {ruleFormError && "*"}</label>
+                      <input className="input" placeholder="e.g. Credit Score < 600" value={newRule.condition} style={{ borderColor: ruleFormError ? "rgba(255,107,91,.5)" : undefined }} onChange={e => { setNewRule(p => ({ ...p, condition: e.target.value })); if (ruleFormError) setRuleFormError(""); }} />
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 700, color: "rgba(240,238,255,.45)", display: "block", marginBottom: 7, letterSpacing: ".05em", textTransform: "uppercase" }}>Action</label>
@@ -752,8 +812,8 @@ export default function AdminPanel() {
                       </select>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button className="btn btn-primary" onClick={addRule}>Add</button>
-                      <button className="btn btn-ghost" onClick={() => setShowAddRule(false)}>Cancel</button>
+                      <button className="btn btn-primary" onClick={addRule}>Add Rule</button>
+                      <button className="btn btn-ghost" onClick={() => { setShowAddRule(false); setRuleFormError(""); }}>Cancel</button>
                     </div>
                   </div>
                 </div>
@@ -900,8 +960,21 @@ export default function AdminPanel() {
                     <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.32)" }}>LAST 6 MONTHS</div>
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button className="btn btn-ghost">Export CSV</button>
-                    <button className="btn btn-ghost">Export PDF</button>
+                    <button className="btn btn-ghost" onClick={() => {
+                      const headers = ["Month", "Approved", "Rejected", "Pending", "Total"];
+                      const rows = monthly.map((m: { month: string; approved: number; rejected: number; pending: number }) =>
+                        [m.month, m.approved, m.rejected, m.pending, m.approved + m.rejected + m.pending]
+                      );
+                      const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = `finntel-analytics-${new Date().toISOString().slice(0, 10)}.csv`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }}>📥 Export CSV</button>
+                    <button className="btn btn-ghost" onClick={() => window.print()}>🖨️ Print PDF</button>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 9, alignItems: "flex-end", height: 140 }}>
@@ -909,9 +982,13 @@ export default function AdminPanel() {
                     const total = m.approved + m.rejected + m.pending;
                     const h = barH[i] ? (total / maxBar) * 130 : 0;
                     return (
-                      <div key={m.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                      <div key={m.month}
+                        onClick={() => setSelectedMonth(m)}
+                        style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "pointer" }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity = "0.8"; e.currentTarget.style.transform = "scaleY(1.03)"; e.currentTarget.style.transformOrigin = "bottom"; }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "none"; }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(240,238,255,.4)" }}>{total}</span>
-                        <div style={{ width: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end", height: 120, gap: 1 }}>
+                        <div style={{ width: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end", height: 120, gap: 1, borderRadius: 6, overflow: "hidden", transition: "box-shadow .2s" }}>
                           <div style={{ width: "100%", height: h ? (m.rejected / total) * h + "px" : "0", background: "#FF6B5B", borderRadius: "3px 3px 0 0", transition: "height 1.2s cubic-bezier(.16,1,.3,1)" }} />
                           <div style={{ width: "100%", height: h ? (m.pending / total) * h + "px" : "0", background: "#FFB800", transition: "height 1.2s cubic-bezier(.16,1,.3,1)" }} />
                           <div style={{ width: "100%", height: h ? (m.approved / total) * h + "px" : "0", background: "linear-gradient(180deg,#00FFB3,#00D4FF)", transition: "height 1.2s cubic-bezier(.16,1,.3,1)" }} />
@@ -1106,6 +1183,8 @@ export default function AdminPanel() {
                       </div>
                       <div style={{ display: "flex", gap: 10 }}>
                         <input className="input" type="number" value={(thresholds as any)[f.key]}
+                          onFocus={e => e.target.select()}
+                          onClick={e => (e.target as HTMLInputElement).select()}
                           onChange={e => setThresholds(p => ({ ...p, [f.key]: Number(e.target.value) }))} />
                         <span style={{ alignSelf: "center", fontSize: 13, fontWeight: 700, color: "#FF6BFF", flexShrink: 0 }}>{f.suffix}</span>
                       </div>
@@ -1454,6 +1533,89 @@ export default function AdminPanel() {
           </div>
         );
       })()}
+
+      {/* ── MONTH DETAIL MODAL ── */}
+      {selectedMonth && (() => {
+        const m = selectedMonth;
+        const total = m.approved + m.rejected + m.pending;
+        const approvalRate = total ? Math.round((m.approved / total) * 100) : 0;
+        const stats = [
+          { label: "Approved", value: m.approved, color: "#00FFB3", pct: total ? Math.round((m.approved / total) * 100) : 0 },
+          { label: "Rejected", value: m.rejected, color: "#FF6B5B", pct: total ? Math.round((m.rejected / total) * 100) : 0 },
+          { label: "Pending",  value: m.pending,  color: "#FFB800", pct: total ? Math.round((m.pending  / total) * 100) : 0 },
+        ];
+        return (
+          <div className="modal-bg" onClick={e => { if (e.target === e.currentTarget) setSelectedMonth(null); }}>
+            <div className="modal" style={{ width: 400 }}>
+              {/* Accent bar */}
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg,#00FFB3,#00D4FF,#FF6BFF)", borderRadius: "18px 18px 0 0" }} />
+
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 900 }}>{m.month} Overview</div>
+                  <div className="mono" style={{ fontSize: 10, color: "rgba(240,238,255,.35)", letterSpacing: ".08em" }}>MONTHLY BREAKDOWN · {total} TOTAL APPLICATIONS</div>
+                </div>
+                <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setSelectedMonth(null)}>✕</button>
+              </div>
+
+              {/* Approval rate circle */}
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 22 }}>
+                <div style={{ position: "relative", width: 100, height: 100 }}>
+                  <svg width="100" height="100" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="10" />
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="url(#mg)" strokeWidth="10"
+                      strokeDasharray={`${approvalRate * 2.51} 251`} strokeLinecap="round"
+                      transform="rotate(-90 50 50)" />
+                    <defs><linearGradient id="mg" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#00FFB3"/><stop offset="1" stopColor="#00D4FF"/></linearGradient></defs>
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "#00FFB3" }}>{approvalRate}%</div>
+                    <div style={{ fontSize: 9, color: "rgba(240,238,255,.4)", fontWeight: 700 }}>APPROVAL</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stacked breakdown bar */}
+              <div style={{ height: 8, borderRadius: 4, overflow: "hidden", display: "flex", marginBottom: 18 }}>
+                {stats.map(s => (
+                  <div key={s.label} style={{ width: `${s.pct}%`, background: s.color, transition: "width .5s" }} />
+                ))}
+              </div>
+
+              {/* Stat rows */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22 }}>
+                {stats.map(s => (
+                  <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: `${s.color}0D`, border: `1px solid ${s.color}28`, borderRadius: 12 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, boxShadow: `0 0 8px ${s.color}` }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#F0EEFF" }}>{s.label}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: s.color }}>{s.value}</div>
+                      <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.4)" }}>{s.pct}%</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action */}
+              <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "11px" }}
+                onClick={() => { setSelectedMonth(null); setNav("applications"); }}>
+                View {m.month} Applications →
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* -- TOAST NOTIFICATION -- */}
+      {toast && (
+        <div style={{ position: "fixed", bottom: 28, right: 28, zIndex: 9999, background: "rgba(0,255,179,.1)", border: "1px solid rgba(0,255,179,.3)", borderRadius: 12, padding: "12px 20px", display: "flex", alignItems: "center", gap: 10, backdropFilter: "blur(12px)", boxShadow: "0 8px 32px rgba(0,255,179,.15)", animation: "fadeUp .3s cubic-bezier(.16,1,.3,1)" }}>
+          <span style={{ fontSize: 16 }}>&#x2705;</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#00FFB3" }}>{toast}</span>
+        </div>
+      )}
     </div>
   );
 }
