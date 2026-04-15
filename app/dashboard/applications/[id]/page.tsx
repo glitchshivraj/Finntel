@@ -65,6 +65,20 @@ export default function ApplicationDetail({ params }: { params: Promise<{ id: st
     });
   }, [params, router]);
 
+  async function manualDecision(dec: "Approved" | "Rejected" | "Review") {
+    if (!app) return;
+    try {
+      await fetch(`/api/applications/${encodeURIComponent(app.id)}/decision`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: dec }),
+      });
+      setApp({ ...app, decision: dec });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   useEffect(() => {
     if (app) setTimeout(() => setAnimBars(true), 300);
   }, [app]);
@@ -267,6 +281,13 @@ export default function ApplicationDetail({ params }: { params: Promise<{ id: st
             <div className="mono" style={{ fontSize: 9, color: "rgba(240,238,255,.35)", textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 4 }}>Composite Score</div>
             <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: "-.03em", color: riskColor }}>{app.score}<span style={{ fontSize: 18, opacity: .4 }}>/100</span></div>
           </div>
+        </div>
+
+        {/* Actions Row */}
+        <div className="fu" style={{ animationDelay: ".6s", opacity: 0, marginTop: 16, display: "flex", gap: 12, justifyContent: "flex-end" }}>
+          <button onClick={() => manualDecision("Approved")} style={{ padding: "12px 24px", borderRadius: 12, background: "rgba(0,255,179,.1)", border: "1px solid rgba(0,255,179,.3)", color: "#00FFB3", fontWeight: 800, cursor: "none", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,255,179,.18)" }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,255,179,.1)" }}>✅ Approve</button>
+          <button onClick={() => manualDecision("Rejected")} style={{ padding: "12px 24px", borderRadius: 12, background: "rgba(255,107,91,.1)", border: "1px solid rgba(255,107,91,.3)", color: "#FF6B5B", fontWeight: 800, cursor: "none", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,107,91,.18)" }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,107,91,.1)" }}>❌ Reject</button>
+          <button onClick={() => manualDecision("Review")} style={{ padding: "12px 24px", borderRadius: 12, background: "rgba(255,184,0,.1)", border: "1px solid rgba(255,184,0,.3)", color: "#FFB800", fontWeight: 800, cursor: "none", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,184,0,.18)" }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,184,0,.1)" }}>🔍 Review</button>
         </div>
       </div>
     </div>
